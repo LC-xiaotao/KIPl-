@@ -4,6 +4,36 @@ All notable changes to KiPI, newest first. Each minor version is one development
 The code's version number went from 0.1.0 straight to 0.5.0, so 0.2.0 to 0.4.0 name
 milestones rather than versions that were ever set.
 
+## 2026-11-09 至 2026-11-10 更新
+
+本仓库面向嘉立创EDA专业版完成了一轮集中开发，主要更新如下；逐项技术细节见下方 1.0.0 条目。
+
+### 新增
+
+- **嘉立创EDA专业版集成**：新增 `easyeda_extension` 扩展，一键把当前 PCB 导出为 ODB++，供 KiPI 独立版打开；KiPI 会把这类板卡标记为 *EasyEDA Pro (ODB++)*。
+- **简体中文界面**：Qt 菜单、工具栏、设置面板、对话框、3D 控件、叠层/容差图和标准按钮均已支持中文；`KIPI_LANG` 可强制中文或英文，`KIPI_I18N_LOG` 可导出未翻译的界面字符串。
+- **中文报告**：DC、AC、耦合噪声和容差报告（HTML 与 PDF）跟随界面语言，图表使用中文字体，网络名、位号、层名和单位保持原样。
+- **AI 助手**：内置 OpenAI、Anthropic、DeepSeek、通义千问、智谱 GLM、Kimi、Gemini、Ollama 和自定义供应商；通过工具读取板卡、修改仿真设置、运行 DC/AC/耦合噪声求解并导出报告。
+- **AI 助手：模型与配置**：自动拉取模型列表（支持 404 自动补 `/v1` 重试）；支持配置名称；自定义接口可选 OpenAI 兼容或 **Anthropic Messages（原生）**；选择模型后自动填入最大输出 token。
+- **AI 助手：对话体验**：Markdown 渲染、思考过程折叠、按工程保存并恢复对话、工具轮次上限（默认 30，可调 1–200）与“继续”、附件上传（PDF、Word、Excel/CSV、文本等）。
+- **新增依赖**：`pypdf`、`python-docx`、`openpyxl`，用于读取 PDF、Word 和 Excel 文件。
+
+### 修复
+
+- **EasyEDA ODB++ 比例错误**：单位从 step 头读取，铜厚按 µm 解释；0.48 mm 介质 + 35 µm 铜可得到正确的 1.58 mm 四层叠层。
+- **窄窗口布局**：右侧设置 Dock 最小宽度 420 → 300 px，表单自动换行、表格横向滚动，窗口变窄时不再挤压 3D 视图。
+- **Qt 6 3D 黑屏**：中文界面事件过滤器不再进入 VTK 原生渲染窗口，3D 标签页正常显示。
+- **模型列表“Not Found”**：接口地址缺少 `/v1` 时自动重试并修正地址；错误信息会显示 HTTP 状态和实际请求 URL。
+- **工具调用中断**：达到轮次上限不再直接终止，改为暂停并显示“继续”，保留完整上下文。
+- **Markdown 未渲染**：助手回复按 Markdown 显示；工具 JSON 和思考内容仍保持纯文本，避免被改写。
+- **附件与对话**：附件只在本地提取文字后随消息发送，文件本身不上传；切换板卡时正在进行的请求会中止，避免写入错误工程。
+
+### 变更
+
+- README 改为中文项目说明，移除英文说明，保留原项目地址。
+- 新增测试覆盖：中文界面、中文报告、AI 助手（供应商、模型列表、思考折叠、Markdown、附件、按工程对话、轮次继续）和窄窗口布局。
+- 全量回归通过（826 项通过，11 项跳过；跳过项为缺少 `kipy` 等可选依赖或真实窗口环境）。
+
 ## 1.0.0 (in development)
 
 ### Added
