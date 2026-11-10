@@ -137,6 +137,34 @@ def test_the_plot_shows_the_line_held_high_and_low(app):
     plot.close()
 
 
+def test_the_waveform_view_zooms_and_resets(app):
+    from kipi.noise.gui.plot import NoisePlot
+    plot = NoisePlot()
+    plot.ax.set_xlim(0.0, 10.0)
+    plot.ax.set_ylim(-1.0, 1.0)
+    plot._remember_home()
+
+    class Wheel:
+        inaxes = plot.ax
+        xdata = 5.0
+        ydata = 0.0
+        step = 1
+
+    plot._scroll(Wheel())
+    x0, x1 = plot.ax.get_xlim()
+    assert x1 - x0 < 10.0 and x0 < 5.0 < x1
+
+    class DoubleClick:
+        dblclick = True
+        button = 1
+        inaxes = plot.ax
+
+    plot._press(DoubleClick())
+    assert plot.ax.get_xlim() == pytest.approx((0.0, 10.0))
+    assert plot.ax.get_ylim() == pytest.approx((-1.0, 1.0))
+    plot.close()
+
+
 def test_the_editor_sets_the_driving_low_resistance(app):
     from kipi.noise.gui.panel import NoisePanel
     from kipi.noise.gui.panel import _get_optional

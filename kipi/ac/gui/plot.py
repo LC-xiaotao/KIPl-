@@ -63,6 +63,14 @@ class ImpedancePlot(QWidget):
         lay.setContentsMargins(4, 4, 4, 4)
         top = QHBoxLayout()
         top.addWidget(self.lbl, 1)
+        # Zoom and pan, as on the transient and waveform plots: the impedance can span
+        # decades, and a cavity resonance needs a closer look than the full sweep.
+        try:
+            from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+            self.toolbar = NavigationToolbar2QT(self.canvas, self, coordinates=False)
+            top.addWidget(self.toolbar)
+        except Exception:                 # noqa: BLE001 — an optional convenience
+            self.toolbar = None
         lay.addLayout(top)
         lay.addWidget(self.canvas, 1)
         self.canvas.mpl_connect("motion_notify_event", self._hover)

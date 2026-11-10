@@ -9,8 +9,8 @@ from typing import List, Optional, Tuple
 import numpy as np
 from qtpy.QtCore import QEvent, QSize, Qt
 from qtpy.QtGui import QColor, QIcon, QPixmap
-from qtpy.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout,
-                            QWidget)
+from qtpy.QtWidgets import (QApplication, QCheckBox, QComboBox, QHBoxLayout, QLabel,
+                            QScrollArea, QVBoxLayout, QWidget)
 
 from kipi.ac.gui.plot import COLORS, _eng, _eng_hz
 from kipi.gui.tooltip_art import art_tip
@@ -95,6 +95,14 @@ class NoisePlot(QWidget):
             "unchanged.", "bw_limit", "bw"))
         top.addWidget(self.chk_bw)
         top.addStretch(1)
+        # Zoom and pan, as on the transient plot: a switching period is microseconds and
+        # the ringing nanoseconds, so the time axis needs a closer look than the full view.
+        try:
+            from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+            self.toolbar = NavigationToolbar2QT(self.canvas, self, coordinates=False)
+            top.addWidget(self.toolbar)
+        except Exception:                 # noqa: BLE001 — an optional convenience
+            self.toolbar = None
         lay.addLayout(top)
         lay.addWidget(self.lbl)
         # Beside the plot, the legend: a tickbox per curve to show or hide it, in the
@@ -129,10 +137,13 @@ class NoisePlot(QWidget):
         self.chk_spectrum.toggled.connect(lambda _: self._draw())
         self.chk_bw.toggled.connect(lambda _: self._draw())
         self.canvas.mpl_connect("motion_notify_event", self._hover)
+        self.canvas.mpl_connect("scroll_event", self._scroll)
+        self.canvas.mpl_connect("button_press_event", self._press)
         self.result = None
         self.periods = 2                # switching periods shown (NoiseSettings.periods_shown)
         self.victim = ""                # the victim shown in the victim view
         self._curves: List[Tuple[str, np.ndarray, np.ndarray, str, object]] = []
+        self._home: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
         self._style()
         self.canvas.draw_idle()
 
@@ -160,6 +171,7 @@ class NoisePlot(QWidget):
     def clear(self):
         self.result = None
         self._curves = []
+        self._home = []
         self.curve_scroll.setVisible(False)
         self.lbl_figures.clear()
         self.lbl.setText(EMPTY)
@@ -236,6 +248,7 @@ class NoisePlot(QWidget):
     def _draw(self):
         from matplotlib.ticker import FuncFormatter
         self._curves = []
+        self._home = []
         key = self.cmb_view.currentData()
         spectrum = self.chk_spectrum.isChecked()
         spectra = self._spectra() if self.result is not None else []
@@ -322,11 +335,12 @@ class NoisePlot(QWidget):
             ax.set_title(f"{self.result.aggressor} ({op.topology}, {op.vin:g} V → {op.vout:g} V, "
                          f"{op.iout:.3g} A, {wf.fsw_hz / 1e3:g} kHz, D = {op.duty:.3f})",
                          fontsize=10)
-        hint = "Hover to read the curves"
+        hint = "Hover to read the curves; scroll to zoom, Shift+scroll for Y, double-click to reset"
         if (v is not None and key == "victim" and not spectrum
                 and v.margin_v > 4 * max(v.peak_v, 1e-15)):
             hint += f" (the ±{v.margin_v * 1e3:.4g} mV noise margin is off the scale)"
         self.lbl.setText(hint + self._bw_note())
+        self._remember_home()
         self.canvas.draw_idle()
 
     def _bw_note(self) -> str:
@@ -470,11 +484,66 @@ class NoisePlot(QWidget):
                          f"{st.margin_v * 1e3:.4g} mV away",
                          fontsize=9)
         self.axes[-1].set_xlabel("Time (µs)")
-        hint = "Hover to read the curves"
+        hint = "Hover to read the curves; scroll to zoom, Shift+scroll for Y, double-click to reset"
         if off:
             hint += f" ({' and '.join(off)} off the scale)"
         self.lbl.setText(hint + self._bw_note())
+        self._remember_home()
         self.canvas.draw_idle()
+
+    def _remember_home(self) -> None:
+        """The full view, for the double-click reset and after a redraw."""
+        self._home = [(ax.get_xlim(), ax.get_ylim()) for ax in self.axes]
+
+    def _reset_view(self) -> None:
+        if len(self._home) != len(self.axes):
+            return
+        for ax, (xlim, ylim) in zip(self.axes, self._home):
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
+        self.canvas.draw_idle()
+
+    def _press(self, event) -> None:
+        if getattr(event, "dblclick", False) and event.button == 1 \
+                and event.inaxes in self.axes:
+            self._reset_view()
+
+    def _scroll(self, event) -> None:
+        """Wheel zoom around the cursor: time on the x axis, Y with Shift; a spectrum
+        zooms both axes, as its log scales make both meaningful."""
+        if event.inaxes not in self.axes or event.xdata is None:
+            return
+        step = getattr(event, "step", 1) or 1
+        factor = 1.25 ** max(-4.0, min(4.0, float(step)))
+        if factor == 1.0:
+            return
+        shift = bool(QApplication.keyboardModifiers() & Qt.ShiftModifier)
+        x = float(event.xdata)
+        y = float(event.ydata) if event.ydata is not None else None
+        if shift and y is not None:
+            self._zoom_axis(event.inaxes, "y", y, factor)
+        else:
+            for ax in self.axes:
+                self._zoom_axis(ax, "x", x, factor)
+            if event.inaxes.get_xscale() == "log" and y is not None:
+                self._zoom_axis(event.inaxes, "y", y, factor)
+        self.canvas.draw_idle()
+
+    @staticmethod
+    def _zoom_axis(ax, axis: str, value: float, factor: float) -> None:
+        lo, hi = (ax.get_xlim() if axis == "x" else ax.get_ylim())
+        log = (ax.get_xscale() if axis == "x" else ax.get_yscale()) == "log"
+        if log:
+            value, lo, hi = max(value, 1e-30), max(lo, 1e-30), max(hi, 1e-30)
+            v, a, b = np.log10(value), np.log10(lo), np.log10(hi)
+            new_lo = 10 ** (v - (v - a) / factor)
+            new_hi = 10 ** (v + (b - v) / factor)
+        else:
+            new_lo = value - (value - lo) / factor
+            new_hi = value + (hi - value) / factor
+        if not (np.isfinite(new_lo) and np.isfinite(new_hi)) or new_lo == new_hi:
+            return
+        (ax.set_xlim if axis == "x" else ax.set_ylim)(new_lo, new_hi)
 
     def _hover(self, event):
         if not self._curves or event.inaxes not in self.axes or event.xdata is None:
