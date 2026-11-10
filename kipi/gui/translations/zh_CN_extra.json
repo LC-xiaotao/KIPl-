@@ -459,5 +459,7 @@
  "No loads ticked yet: tick the ones to show under Loads, on the left.": "尚未勾选负载：请在左侧“负载”下勾选要显示的项。",
  "Language": "语言",
  "Follow system": "跟随系统",
- "Interface and report language: follow the system, or force Chinese or English": "界面与报告语言：跟随系统，或强制中文/英文"
+ "Interface and report language: follow the system, or force Chinese or English": "界面与报告语言：跟随系统，或强制中文/英文",
+ "Fast": "快速",
+ "Fast analysis: coarser DC/AC meshes, fewer AC sweep points, no noise board model and fewer harmonics. Quicker, but approximate": "快速分析：放粗 DC/AC 网格、减少 AC 扫频点、关闭噪声板级模型并减少谐波；更快，但结果为近似值"
 }

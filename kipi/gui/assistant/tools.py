@@ -7,6 +7,7 @@ the chat stays responsive (the progress bar and the 3D view update meanwhile).
 
 from __future__ import annotations
 
+import copy
 import json
 import time
 from typing import Any, Dict, List, Optional
@@ -97,6 +98,34 @@ def _round(x, n=4):
         return round(float(x), n)
     except (TypeError, ValueError):
         return x
+
+
+FAST_NOTE = ("快速模式：网格、扫频点或谐波已简化，结果适合快速判断；"
+             "需要精确结果请关闭“快速”后重新求解。")
+
+
+def _fast_setup(setup):
+    """A copy with coarser meshes, fewer sweep points and harmonics, no board model.
+
+    The solve functions already freeze (deep-copy) their setup, and keep the frozen copy
+    as ``solved_setup`` for reports, so the GUI's own setup is untouched.
+    """
+    fast = copy.deepcopy(setup)
+    settings = fast.settings
+    settings.max_edge_mm = max(settings.max_edge_mm, settings.max_edge_mm * 2.5)
+    settings.min_edge_mm = max(settings.min_edge_mm, settings.min_edge_mm * 2.0)
+    settings.tol = max(settings.tol, 1e-8)
+    settings.max_iter = min(settings.max_iter, 1000)
+    ac = fast.ac
+    ac.points_per_decade = min(ac.points_per_decade, 50)
+    ac.field_points_per_decade = min(ac.field_points_per_decade, 5)
+    ac.max_edge_mm = max(ac.max_edge_mm, ac.max_edge_mm * 2.0)
+    ac.min_edge_mm = max(ac.min_edge_mm, ac.min_edge_mm * 2.0)
+    noise = fast.noise
+    noise.max_harmonics = min(noise.max_harmonics, 400)
+    noise.field_per_decade = min(noise.field_per_decade, 3)
+    noise.board_model = False
+    return fast
 
 
 # ---------------------------------------------------------------------------
@@ -200,8 +229,9 @@ TOOLS: List[dict] = [
 # ---------------------------------------------------------------------------
 
 class ToolRunner:
-    def __init__(self, main):
+    def __init__(self, main, fast: bool = False):
         self.main = main
+        self.fast = fast
 
     # -- waiting ----------------------------------------------------------
     def _pending(self) -> bool:
@@ -433,13 +463,20 @@ class ToolRunner:
             raise ValueError("设置中没有 VRM。请先 add_vrm。")
         if not setup.nets:
             raise ValueError("没有勾选网络。请先 set_nets 勾选电源轨网络。")
+        used = _fast_setup(setup) if self.fast else setup
+        started = time.monotonic()
         main._last_solve_error = None
-        main.run_solve(setup)
+        main.run_solve(used)
         if not self.wait_idle():
             raise RuntimeError("DC 求解超时或仍在运行")
         if getattr(main, "_last_solve_error", None):
             raise RuntimeError(main._last_solve_error)
-        return self.tool_get_dc_results({})
+        result = self.tool_get_dc_results({})
+        result["elapsed_s"] = round(time.monotonic() - started, 2)
+        if self.fast:
+            result["fast"] = True
+            result["note"] = FAST_NOTE
+        return result
 
     def tool_get_dc_results(self, args) -> dict:
         tree = self.main._tree
@@ -550,15 +587,22 @@ class ToolRunner:
             raise ValueError(f"没有名为 {name} 的干扰源")
         if main.mode != "noise":
             main.set_mode("noise")
+        used = _fast_setup(setup) if self.fast else setup
+        started = time.monotonic()
         main._last_noise_error = None
-        main.run_noise_solve(setup, name)
+        main.run_noise_solve(used, name)
         if not self.wait_idle(timeout_s=3600):
             raise RuntimeError("噪声求解超时或仍在运行")
         if getattr(main, "_last_noise_error", None):
             raise RuntimeError(main._last_noise_error)
         if main.noise_panel.result is None:
             raise RuntimeError("求解结束但没有结果")
-        return self.tool_get_noise_results({})
+        result = self.tool_get_noise_results({})
+        result["elapsed_s"] = round(time.monotonic() - started, 2)
+        if self.fast:
+            result["fast"] = True
+            result["note"] = FAST_NOTE
+        return result
 
     def tool_get_noise_results(self, args) -> dict:
         result = getattr(self.main.noise_panel, "result", None)
@@ -614,13 +658,20 @@ class ToolRunner:
         _check_nets(main, [ground])
         if main.mode != "ac":
             main.set_mode("ac")
+        used = _fast_setup(setup) if self.fast else setup
+        started = time.monotonic()
         main._last_ac_error = None
-        main.run_ac_solve(setup, vrm, ground)
+        main.run_ac_solve(used, vrm, ground)
         if not self.wait_idle(timeout_s=3600):
             raise RuntimeError("AC 求解超时或仍在运行")
         if getattr(main, "_last_ac_error", None):
             raise RuntimeError(main._last_ac_error)
-        return self.tool_get_ac_results({"vrm": vrm})
+        result = self.tool_get_ac_results({"vrm": vrm})
+        result["elapsed_s"] = round(time.monotonic() - started, 2)
+        if self.fast:
+            result["fast"] = True
+            result["note"] = FAST_NOTE
+        return result
 
     def tool_get_ac_results(self, args) -> dict:
         panel = self.main.ac_panel

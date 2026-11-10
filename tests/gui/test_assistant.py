@@ -516,6 +516,51 @@ def test_dock_shows_the_custom_config_name():
     assert "公司网关" in dock.lbl_provider.text()
 
 
+def test_fast_setup_is_coarser_without_touching_the_setup():
+    from kipi.gui.assistant.tools import _fast_setup
+
+    setup = PISetup()
+    fast = _fast_setup(setup)
+    assert fast.settings.max_edge_mm > setup.settings.max_edge_mm
+    assert fast.settings.tol >= setup.settings.tol
+    assert fast.ac.points_per_decade < setup.ac.points_per_decade
+    assert fast.noise.max_harmonics < setup.noise.max_harmonics
+    assert not fast.noise.board_model and setup.noise.board_model
+
+
+def test_request_history_drops_old_turns_and_truncates_results(monkeypatch):
+    from kipi.gui.assistant import panel as panel_mod
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    monkeypatch.setattr(panel_mod, "HISTORY_CHAR_BUDGET", 700)
+    monkeypatch.setattr(panel_mod, "TOOL_RESULT_CHAR_BUDGET", 50)
+    dock.history = [
+        {"role": "user", "content": "old " * 100},
+        {"role": "assistant", "content": "old answer"},
+        {"role": "user", "content": "new question"},
+        {"role": "assistant", "content": "",
+         "tool_calls": [{"id": "c1", "name": "get_context", "arguments": {}}]},
+        {"role": "tool", "tool_call_id": "c1", "name": "get_context",
+         "content": "x" * 500},
+    ]
+    kept = dock._request_history()
+    assert [m["role"] for m in kept] == ["user", "assistant", "tool"]
+    assert kept[0]["content"] == "new question"
+    assert kept[2]["content"].startswith("x" * 50)
+    assert "已截断" in kept[2]["content"]
+
+
+def test_the_fast_checkbox_drives_the_tool_runner():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    dock.chk_fast.setChecked(True)
+    assert dock.runner.fast
+    dock.chk_fast.setChecked(False)
+    assert not dock.runner.fast
+
+
 def test_settings_dialog_fetches_and_offers_models(monkeypatch):
     from kipi.gui.assistant import panel as panel_mod
 
