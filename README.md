@@ -5,11 +5,11 @@
 # KiPI — 电源完整性仿真器（独立版 / KiCad 插件 / 嘉立创EDA专业版）
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![KiCad 9.0.3+](https://img.shields.io/badge/KiCad-9.0.3%2B-314cb0.svg?logo=kicad&logoColor=white)](#requirements)
-[![Platform: Windows | Linux | macOS](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#requirements)
-[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776ab.svg?logo=python&logoColor=white)](#requirements)
+[![KiCad 9.0.3+](https://img.shields.io/badge/KiCad-9.0.3%2B-314cb0.svg?logo=kicad&logoColor=white)](#安装与运行)
+[![Platform: Windows | Linux | macOS](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#安装与运行)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776ab.svg?logo=python&logoColor=white)](#安装与运行)
 
-**第一次接触电源完整性？先看 [求解器指南](https://drewsum.github.io/KiPI/solver-guide.html)（[源文件](docs/solver-guide.html)）：它介绍了什么是 PI、为什么重要，以及 KiPI 的网格、DC、热、AC 和耦合噪声求解器如何工作。**
+**第一次接触电源完整性？先看 [求解器指南](docs/solver-guide.html)：它介绍了什么是 PI、为什么重要，以及 KiPI 的网格、DC、热、AC 和耦合噪声求解器如何工作。**
 
 KiPI 是一款电源完整性分析工具，支持三种运行方式：独立运行、作为 KiCad 9/10 的 IPC 插件，或配合 **嘉立创EDA专业版（EasyEDA Pro）** 通过 ODB++ 导出使用。包含三种分析模式：
 
@@ -21,7 +21,7 @@ KiPI 是一款电源完整性分析工具，支持三种运行方式：独立运
 
 ![Current density with flow arrows through the +12V input path and the U201 eFuse, with the Series links table](docs/images/current_density.png)
 
-**状态：1.0.0（稳定版）**（[更新日志](docs/CHANGELOG.md)）。本仓库是面向 **嘉立创EDA专业版** 的定制版本，保留上游 KiPI 的 GPL-3.0 许可证与提交历史。仓库地址：[gitee.com/liu-xiaotao/kiplpdndianyuan](https://gitee.com/liu-xiaotao/kiplpdndianyuan)。
+**状态：1.0.0（稳定版）**（[更新日志](docs/CHANGELOG.md)）。原项目地址：<https://github.com/drewsum/KiPI>。
 
 ## 最新特性
 
@@ -90,496 +90,205 @@ KiPI 内置 AI 助手，可以用自然语言操作插件：读取当前板卡�
 
 助手通过工具操作插件，而不是凭空回答：读取板卡、网络、元件和已有设置；添加/删除 VRM、负载、AC 探针、噪声干扰源和受害网络；运行 `solve_dc`、`solve_ac`、`solve_noise`；返回负载压降、VRM、网络组、探针阻抗、受害网络噪声与裕量；导出 DC/AC/噪声报告（HTML 或 PDF）。系统提示要求助手先核对网络/位号、明确标注假设，并且只报告工具返回的数据。
 
-## 详细安装与使用（English）
+## KiCad 插件安装
 
-> 以下保留上游英文说明，包含 KiCad 插件要求、PCM/手动安装、独立运行、详细使用步骤、开发和许可证信息。
+### 要求
 
+* **KiCad 9.0.3 或更高版本**。在 KiCad 10 上开发，已在 KiCad 9 验证。
+* **Python 3.10–3.13**，即 KiCad 运行插件所用的 Python。
+  * **Windows**：使用 KiCad 自带的 Python 3.11，无需额外安装。
+  * **Linux**：使用系统 Python。如果发行版默认 Python 3.14，pip 需要编译部分包，请安装 `build-essential`、`python3-dev` 等编译依赖。
+  * **macOS**：KiCad 自带的 Python 3.9 太旧，请安装 Python 3.12，并在 *Preferences → Plugins* 中选择它作为 **Python interpreter**。
 
-### As a KiCad plugin
+### 通过 Plugin and Content Manager 安装
 
-#### Requirements
+1. 在 KiCad 中启用 **Preferences → Plugins → Enable KiCad API**。
+2. 打开 **Plugin and Content Manager**，在 *Plugins* 中找到 **KiPI** 并点击 **Install**。如果列表中还没有本版本，请使用下面的手动安装。
+3. 重启 PCB 编辑器并点击 **KiPI**；首次点击会安装依赖。PCM 会随新版本提供更新。
 
-* **KiCad 9.0.3 or later.** Developed on KiCad 10 and confirmed on KiCad 9. The Plugin and
-  Content Manager offers KiPI from 9.0.3. A manual install still runs on 9.0.0 to 9.0.2,
-  with less: KiCad cannot say which layers a plated pad has copper on there, so pads are
-  kept on every layer (KiPI warns in its log), and 9.0.0 cannot report net classes.
-* **Python 3.10 to 3.13**, the one KiCad runs plugins with (some dependencies have no
-  prebuilt packages for Python 3.14 yet).
-  * **Windows:** KiCad's own Python 3.11. Nothing to do.
-  * **Linux:** KiCad uses the system Python. On a distribution with Python 3.14 (Ubuntu
-    26.04, Fedora 43), pip has to compile some packages, which needs
-    `sudo apt install build-essential python3-dev` or similar.
-  * **macOS:** KiCad bundles Python 3.9, which is too old. Install Python 3.12 (for
-    example from python.org or Homebrew) and select it as the **Python interpreter** in
-    *Preferences → Plugins*.
+### 手动安装
 
-#### From the Plugin and Content Manager
-
-1. In KiCad, enable **Preferences → Plugins → Enable KiCad API**.
-2. Open **Plugin and Content Manager** from the KiCad project window, find **KiPI** under
-   *Plugins*, and click **Install**. Until KiPI is listed in KiCad's repository, download
-   `KiPI-<version>-pcm.zip` from the
-   [latest release](https://github.com/drewsum/KiPI/releases/latest) and use
-   **Install from File…** instead.
-3. Restart the PCB editor and click **KiPI**, as in steps 3 and 4 below: the first click
-   sets up KiPI's packages. PCM offers each new release as an update.
-
-PCM keeps KiPI in its own folder (`3rdparty/plugins/com_github_drewsum_kipi` beside the
-plugins folder) and replaces it on update. If you also have a manual copy in
-`plugins/KiPI`, remove it first, or KiCad shows two KiPI buttons. Shortcuts made by the
-standalone launcher from a PCM install point into that folder, so they stop working if
-you uninstall KiPI in PCM.
-
-#### Manually
-
-1. In KiCad, enable **Preferences → Plugins → Enable KiCad API**.
-2. Clone, link (or copy) this repo into your KiCad plugins folder, or uncompress the release source zip. The examples use KiCad 10's
-   folder: for KiCad 9, put `9.0` in place of `10.0`. On Windows, KiCad uses your
-   *Documents* folder, which may be redirected to OneDrive:
+1. 在 KiCad 中启用 **Preferences → Plugins → Enable KiCad API**。
+2. 将本仓库克隆、链接或复制到 KiCad 插件目录。下面以 KiCad 10 为例；KiCad 9 把 `10.0` 换成 `9.0`。Windows 的 *Documents* 可能被重定向到 OneDrive：
 
    ```powershell
    $plug = "$([Environment]::GetFolderPath('MyDocuments'))\KiCad\10.0\plugins"
    New-Item -ItemType Junction -Path "$plug\KiPI" -Target "<path to this repo>"
    ```
 
-   On macOS the folder is `~/Documents/KiCad/10.0/plugins`, and on Linux
-   `~/.local/share/kicad/10.0/plugins`:
+   macOS 的目录是 `~/Documents/KiCad/10.0/plugins`，Linux 是 `~/.local/share/kicad/10.0/plugins`：
 
    ```sh
    ln -s "<path to this repo>" ~/Documents/KiCad/10.0/plugins/KiPI          # macOS
    ln -s "<path to this repo>" ~/.local/share/kicad/10.0/plugins/KiPI       # Linux
    ```
 
-   Or, without git, download `KiPI-<version>.zip` from the
-   [latest release](https://github.com/drewsum/KiPI/releases/latest) and unzip it into the
-   plugins folder, which gives `plugins/KiPI`.
+3. 重启 PCB 编辑器。KiCad 会在后台创建插件的 Python 环境，只安装 KiPI 启动所需的 `kicad-python`，因此 **KiPI** 工具栏按钮几秒内就会出现。如果一直没有出现，在 *Preferences → Plugins* 中右键该动作并选择 *Recreate Plugin Environment*。
+4. 点击 **KiPI**。首次会打开设置窗口，列出要安装的包及大小（Windows 约 254 MB 下载），以及可选的 PARDISO 求解器；点击 **Install** 前不会安装任何东西，完成后 KiPI 自动打开。之后点击会直接打开。
 
-3. Restart the PCB editor. KiCad makes the plugin's Python environment in the background
-   with only what KiPI needs to start (kicad-python), so the **KiPI** toolbar button appears
-   within seconds. If it never appears, right-click the action in *Preferences → Plugins*
-   and choose *Recreate Plugin Environment*.
-4. Click **KiPI**. The first time, KiPI shows its setup window: every package it will install
-   into KiCad's environment for it, with sizes (about 254 MB to download on Windows), and
-   the optional [PARDISO](#optional-faster-solves-on-large-boards-windows-and-linux-x86-64)
-   solver. Nothing is installed until you click **Install**, and KiPI opens once it is done.
-   Later clicks open KiPI straight away. The window uses wxPython, which KiCad's Python
-   has; where it has neither wx nor Tk, KiPI asks with the desktop's own dialogs (macOS,
-   or Linux with `zenity` or `kdialog`), and with none of those it installs without asking.
-   The packages stay through plugin reloads; *Recreate Plugin Environment* removes them, and
-   the next click sets up again.
+## 独立版安装
 
-### Standalone
-
-1. Install **Python 3.10 to 3.13** if you do not have one (from
-   [python.org](https://www.python.org/downloads/), or your package manager). On Linux, add
-   `python3-venv` (Debian, Ubuntu) and, for the setup window, `python3-tk`.
-2. Put the KiPI folder anywhere: clone this repo, or unzip `KiPI-<version>.zip` from the
-   [latest release](https://github.com/drewsum/KiPI/releases/latest).
-3. Start KiPI with its launcher: double-click **`kipi_launcher.pyw`** (Windows), or run
+1. 安装 **Python 3.10–3.13**。Linux 还需要 `python3-venv`（Debian/Ubuntu），以及设置窗口所需的 `python3-tk`。
+2. 将本仓库放在任意位置。
+3. 启动 KiPI：
 
    ```sh
-   python kipi_launcher.py                      # or: python kipi_launcher.py <board>.kipi.json.gz
+   python kipi_launcher.py                      # 也可以带一个板卡文件
+   python kipi_launcher.py <board>.kipi.json.gz
    ```
 
-   On Windows the first start leaves a **KiPI** shortcut next to it. On Linux and macOS, run
-   `python3 kipi_launcher.py --create-shortcut` once to add KiPI to the applications menu
-   (Linux) or `~/Applications` (macOS).
+   Windows 上也可以双击 **`kipi_launcher.pyw`**。首次启动会显示依赖安装窗口，点击 **Install** 后开始安装；完成后启动 KiPI。
 
-The first start sets up KiPI. The setup window lists every package KiPI will install with
-its size (about 254 MB to download on Windows), and nothing is installed until you click
-**Install**. On Windows and Linux x86-64 it also offers
-[PARDISO](#optional-faster-solves-on-large-boards-windows-and-linux-x86-64). Everything goes
-into an environment of KiPI's own, outside the KiPI folder (`KIPI_HOME` puts it elsewhere):
+4. 依赖环境位于 KiPI 文件夹之外，`KIPI_HOME` 可以改到别处：
 
-| | KiPI's environment |
-|---|---|
-| Windows | `%LOCALAPPDATA%\KiPI` |
-| macOS | `~/Library/Application Support/KiPI` |
-| Linux | `~/.local/share/kipi` |
+   | 系统 | KiPI 环境目录 |
+   |---|---|
+   | Windows | `%LOCALAPPDATA%\KiPI` |
+   | macOS | `~/Library/Application Support/KiPI` |
+   | Linux | `~/.local/share/kipi` |
 
-A KiPI that KiCad installed (from the Plugin and Content Manager, or copied into KiCad's
-`plugins` folder) runs standalone in the environment KiCad made for its plugin instead,
-so the packages are installed once for both. The launcher adds what is missing there, and
-uses an environment of its own when KiCad has not made one yet, the Python it was made
-from is gone, or it is not Python 3.10 to 3.13. `--own-env` always uses KiPI's own.
+   如果 KiPI 是从 KiCad 插件安装的，独立版会复用 KiCad 为插件创建的环境，依赖只安装一次。`--own-env` 可强制使用独立环境。
 
-![The launcher's setup window on a first start: every package with its size, and the optional PARDISO solver](docs/images/launcher_setup.png)
-
-Use **Open…** to open a board and **Reload** to read it again. KiCad boards keep the same
-setup file standalone and in the plugin. KiPI uses the zone fills saved in the file, so
-**fill the zones in KiCad (B) and save** before opening a `.kicad_pcb`. ODB++ jobs and
-HyperLynx files share a board's setup when exported next to it with the same name
-(`Board.zip`, `Board.hyp`). The [user guide](docs/help.html) lists what each format does
-and does not carry.
-
-To change the setup later, use **About → Manage dependencies…** in KiPI, or the launcher:
+常用启动器参数：
 
 ```sh
-python kipi_launcher.py --setup              # the setup window again (add or remove PARDISO)
-python kipi_launcher.py --add-pardiso        # or --remove-pardiso, without questions
-python kipi_launcher.py --repair             # reinstall everything from scratch
-python kipi_launcher.py --reset              # delete KiPI's environment
-python kipi_launcher.py --own-env            # KiPI's own environment, not KiCad's plugin one
-python kipi_launcher.py --create-shortcut    # add KiPI to the Start menu / app menu / ~/Applications
+python kipi_launcher.py --setup              # 重新打开依赖设置窗口
+python kipi_launcher.py --add-pardiso        # 安装 PARDISO（或 --remove-pardiso）
+python kipi_launcher.py --repair             # 重新安装全部依赖
+python kipi_launcher.py --reset              # 删除 KiPI 环境
+python kipi_launcher.py --own-env            # 使用 KiPI 自己的环境
+python kipi_launcher.py --create-shortcut    # 添加到开始菜单 / 应用菜单
 ```
 
-If setup fails, the launcher says why; everything the installer printed is in the `logs`
-folder next to the environment.
-
-### Optional: faster solves on large boards (Windows and Linux, x86-64)
-
-If the optional [`pypardiso`](https://pypi.org/project/pypardiso/) package is installed,
-KiPI solves with Intel MKL's multithreaded PARDISO solver in place of SciPy's
-single-threaded one. On a 645k-unknown rail one solve drops from about 8 s to 1.2 s. Small
-boards gain little. It costs about 210 MB of download on Windows (320 MB on Linux) and
-there are no MKL packages for macOS or ARM.
-
-KiPI installs it by default where it can, with an opt-out: in the launcher's first setup
-standalone, or in a prompt the first time the plugin opens. *About → Manage dependencies…*
-adds or removes it later, and *About → Copy version info* shows which solver is in use. If
-PARDISO cannot load, KiPI falls back to SciPy and says so in the log.
-
-## Using KiPI
-
-### 1. Open your board in KiCad
-
-Open your board in the PCB editor and click the **KiPI** toolbar button. KiPI opens in its
-own window and reads the board through the KiCad API; the log at the bottom streams each
-stage as it runs.
-
-* **Load from KiCad** re-reads the board after you edit it in KiCad, and reloads the saved PI setup.
-* **Refill zones** (on by default) refills every zone in KiCad before reading, so the zone
-  fills KiPI sees match your current routing. KiPI analyzes filled copper only.
-* **Save snapshot… / Open snapshot…** store the extracted board as a file that KiPI can open
-  later without KiCad. See example snapshots in the repo to experiment!
-* **Mode: DC / AC / Noise** (right end of the toolbar, or **Ctrl+1** / **Ctrl+2** / **Ctrl+3**)
-  picks the analysis mode. Readme sections 2 to 5 are DC, the default;
-  [section 6](#6-ac-pdn-impedance) covers AC and [section 7](#7-coupled-noise) Coupled Noise.
-  The VRMs, series links and capacitor models are shared by all three.
-* **Help** (or **F1**) opens the [user guide](docs/help.html) in your browser.
-
-### 2. Pick Power Nets from Netlist
+安装失败时，启动器会说明原因；安装器输出在环境目录旁的 `logs` 文件夹中。
 
-The **Board** panel on the left lists every net in the extracted design. Tick the nets you
-want to analyze: only ticked nets can be simulated, and they are offered in the PI setup pin
-pickers. **Power & ground only**, **All power** and **None** help pick them, and the ticks
-are saved with the setup.
+### 可选：PARDISO 加速
 
-Below that are the **Copper layers**, the **Display** options (color by layer or net, Z
-scale, vias, pads, mask, silkscreen, part **3D Models**), and **PI Models**, which marks the
-parts of the current analysis in 3D. Clicking a part in 3D selects it in the setup, and the
-**Info** box shows whatever you last clicked, with **Select in KiCad** to find it in the PCB
-editor.
+安装 [`pypardiso`](https://pypi.org/project/pypardiso/) 后，KiPI 使用 Intel MKL 的多线程 PARDISO 求解器替代 SciPy 的单线程求解器。大型电源轨的求解时间可显著缩短（例如 645k 未知量从约 8 秒降到 1.2 秒）。Windows 下载约 210 MB，Linux 约 320 MB；macOS 和 ARM 没有可用的 MKL 包。
 
-![PI Models marking the parts of the analysis, snapped to the selected +3.3V switcher](docs/images/pi_models.png)
+启动器首次安装时会默认尝试安装 PARDISO，可取消；也可以在 **About → Manage dependencies…** 中随时添加或删除。PARDISO 无法加载时，KiPI 会自动回退到 SciPy 并在日志中说明。
 
-The **Power tree** toolbar button opens a block diagram of the modelled power network, left
-to right in the direction power flows, and can be saved as a PNG.
+## 使用流程
 
-![The power tree of the multiphase buck example: a 12 V source, the 4-phase switcher, the 0.9 V core rail, its load and capacitor models](docs/images/power_tree.png)
+### 1. 打开板卡
 
-The **Stackup** toolbar button lists every copper and dielectric layer with its thickness,
-material, εr, thermal conductivity and resistivity, with a cross-section drawn to scale.
-Untick **Lock to imported values** to try other thicknesses and materials: every analysis
-uses the edited stackup.
+在 KiCad PCB 编辑器中点击 **KiPI**，或在独立版中点击 **Open…** 选择板卡文件。KiPI 会读取铜皮、网络、焊盘、过孔、板框和叠层。
 
-![The Stackup window: copper and dielectric layers with thickness, material, εr, thermal conductivity and resistivity](docs/images/stackup.png)
+* **Reload / Load from KiCad**：在编辑器中修改板卡后重新读取，并保留已保存的 PI 设置。
+* **Refill zones**：默认开启，读取前先在 KiCad 中重新填充区域，保证 KiPI 看到的是最新铜皮。
+* **Save snapshot… / Open snapshot…**：把提取后的板卡保存为文件，之后无需 KiCad 即可打开。
+* **Mode: DC / AC / Noise**：切换分析模式（`Ctrl+1` / `Ctrl+2` / `Ctrl+3`）。
+* **Help / F1**：打开离线用户指南。
 
-Drag to rotate, scroll to zoom and shift-drag (or middle-drag) to pan; the
-[user guide](docs/help.html#keys) lists every keyboard shortcut.
+### 2. 选择电源网络
 
-### 3. Model the Power Distribution System
+左侧 **Board** 面板列出设计中的所有网络。只有勾选的网络才参与仿真，也会出现在 PI 设置的引脚选择器中。可使用 **Power & ground only**、**All power** 和 **None** 快速选择；勾选状态随设置保存。
 
-The **PI setup** panel on the right holds the power tree. Each list has **Add**,
-**Duplicate** and **Remove** buttons, and every field has a tooltip. Pins are chosen with a
-picker: the net, then the part, then optionally the pin numbers. As you pick pins, KiPI
-pre-fills what usually follows from them (a VRM's target voltage from the net name, ground
-pins, a series link's other side and a resistor's value), and problems are shown in red.
-**Import…** fills the power tree from a Tomachie power-tree file (`<design>.pdn.json`).
-It also reads a HyperLynx BoardSim session file (`.bud`): its power nets are ticked, and its
-`DC_CONN` series links, decoupling capacitor groups, VRMs (as ideal sources, with their
-remote sense) and DC sinks (as loads) are added to the setup.
-
-**VRMs tab**: one entry per regulator, power input, or ideal supply. A VRM is a **Source**,
-**LDO**, **Switcher** or **Isolated** converter, with its output pins and target voltage,
-its input pins (which link it to the rail upstream), efficiency or quiescent current, and
-optional remote sense, ground pins, load line, dropout, input range, DC accuracy, current
-limit and multiple **Phases**. KiPI works out each VRM's input current from what it feeds.
-
-To try it without a design of your own, open the example board in
-[`examples/multiphase_buck`](examples/multiphase_buck): a 4-phase 12 V → 0.9 V, 40 A core rail
-(`python -m kipi --snapshot examples/multiphase_buck/multiphase_buck.kipi.json.gz`).
-
-**Loads tab**: one entry per consumer: its **Supply pins**, **Current** (split evenly or by
-pin group), optional **Ground pins** and a **Tolerance** for PASS/FAIL. **Load models**
-(**Model ▾**) save and apply a part's supplies as a YAML file. They also read a
-HyperLynx PI model (`.hlpimodel`): its DC sink currents, pin by pin, as a load on each net
-the pins are on, on as many parts as you tick.
-
-![Load editor](docs/images/setup_loads.png)
-
-**Series links tab**: parts that pass DC from one net to another, such as sense
-resistors, ferrite beads, fuses, load switches and 0 Ω links: **Side A pins**, **Side B
-pins** and a **Resistance**. **Import SPICE model…** uses the maker's SPICE model of the part
-for both DC and AC, including diodes and multi-pin parts such as common-mode chokes.
-**In order to assign a series link, the nets on either side must both be defined as power
-nets in the net selection pane.**
+下方是 **Copper layers**、**Display**（按层/网络着色、Z 轴比例、过孔、焊盘、阻焊、丝印、元件 3D 模型）和 **PI Models**（在 3D 中标记当前分析涉及的器件）。
 
-**Solve tab**: every combined rail, with a checkbox. Untick the rails that are not modeled or
-routed yet to solve the rest.
+### 3. 建立电源分配模型
 
-![The Solve tab: tick the net groups to solve](docs/images/dc_solve_tab.png)
+右侧 **PI setup** 面板保存电源树，每一项都有 **Add**、**Duplicate** 和 **Remove** 按钮，所有字段都有工具提示。
 
-**Mesh tab**: **Max edge** is the largest FEA mesh triangle edge in mm; smaller is more
-accurate and slower. **Via plating** sets each kind of via's plating thickness and fill.
+* **VRMs**：每个稳压器/电源输入/理想源一项，类型可选 **Source**、**LDO**、**Switcher** 或 **Isolated**；填写输出引脚、目标电压、输入引脚、效率或静态电流，以及可选的远程采样、地引脚、负载线、压差、输入范围、DC 精度、限流和多相。
+* **Loads**：每个负载一项，填写电源引脚、电流、可选地引脚和 PASS/FAIL 容差。
+* **Series links**：跨越两个网络的器件（采样电阻、磁珠、保险丝、负载开关、0 Ω 连接），填写 A 侧、B 侧和电阻；两侧网络都必须是已勾选的电源网络。
+* **Solve**：勾选要求解的电源轨组合。
+* **Mesh**：`Max edge` 控制 FEA 网格最大边长，越小越准也越慢；**Via plating** 设置各类过孔的镀铜厚度和填充。
+* **Thermal**（默认关闭）：勾选 **Electro-thermal co-simulation** 后，损耗会加热板卡，温度升高又改变铜电阻。
 
-![The Mesh tab with the via plating rules](docs/images/setup_mesh.png)
+设置会在点击 **Save** 和每次求解时保存为板卡旁的 `<board>.kipi-setup.yml`，可以随工程一起提交到版本库。
 
-**Thermal tab** (off by default): tick **Electro-thermal co-simulation** to make losses heat
-the board and the warmer copper become more resistive. Each copper layer has its own
-temperature, with heat crossing the laminate and running down vias. Inspired by
-[KiCad Thermal Sim](https://github.com/PoeAlex/KiCad_Thermal_Sim) by
-[PoeAlex](https://github.com/PoeAlex).
-
-![Thermal settings](docs/images/setup_thermal.png)
-
-The setup is saved as `<board>.kipi-setup.yml` next to the board when you click **Save** and
-every time you solve. It travels with the project and can go into version control. AI agents
-can make quick work of power tree modelling by editing this file directly.
-
-### 4. Solve
-
-Click **Solve all**. Every rail is meshed and solved, downstream loads first, so each VRM's
-input current includes everything it feeds. Progress streams into the log; **Cancel** stops
-the run.
-
-Click **Report** to write an HTML report next to the board, or choose **PDF**. The HTML
-report is a single portable file with the summary and every results table, an interactive 3D
-view per rail, per-layer voltage and current-density maps, the board temperature map when
-thermal is on, and a **User notes** box.
+### 4. 求解 DC
 
-| Summary tables | Interactive 3D per net group |
-|---|---|
-| ![Report summary tables](docs/images/report_tables.png) | ![Report 3D voltage view](docs/images/report_3d.png) |
+点击 **Solve all**。KiPI 按下游优先的顺序逐条电源轨网格化并求解，每个 VRM 的输入电流包含其下游全部负载。进度显示在日志中，**Cancel** 可中止。
 
-### 5. Read the results
+点击 **Report** 生成 HTML 报告，或选择 **PDF**。HTML 报告是单个可移植文件，包含汇总、全部结果表、每条电源轨的交互式 3D 视图、逐层电压/电流密度图和可选的温度图。
 
-In the **Results** pane, choose a **net group** and a **field** to show in 3D: **Voltage**,
-**Current density** (tick **Arrows** to see the flow), **Power density**, **Via current**
-or **Temperature**. Click any point to probe it in the Info box, and set the **Color
-scale** to look closer.
+### 5. 查看结果
 
-![Voltage drop along the +12V input plane, from the input connector to the two loads, with the Loads results table](docs/images/voltage.png)
+在 **Results** 面板选择网络组和 3D 显示字段：**Voltage**、**Current density**（勾选 **Arrows** 显示流向）、**Power density**、**Via current** 或 **Temperature**。点击任意点可在 Info 面板查看数值，并调整 **Color scale**。
 
-![Current density with flow arrows through the +12V input path and the U201 eFuse, with the Series links table](docs/images/current_density.png)
+结果标签页包括 **Loads**（有效电压、压降和 PASS/FAIL）、**VRMs**、**Series links**（I²R 损耗）、**Vias**（按电流排序）、**Losses**、**Thermal** 和 **Notes**。**Export ▾** 可写 CSV 或 ParaView 文件，**Save results…** 保存结果，**Open results…** 无需重新求解即可打开。
 
-| Via current | Temperature |
-|---|---|
-| ![Via current, with the Vias table ranked by current](docs/images/via_current.png) | ![Board temperature from the electro-thermal solve, with the Thermal results tab](docs/images/temperature.png) |
+### 6. AC：PDN 阻抗
 
-The result tabs give **Loads** (effective voltage, drop and PASS/FAIL), **VRMs**, **Series
-links** (I²R losses), **Vias** ranked by current, **Losses**, **Thermal** and **Notes**.
-**Export ▾** writes CSV or ParaView files, and **Save results…** writes a results file that
-**Open results…** reloads without solving again.
-
-### 6. AC: PDN impedance
-
-Switch **Mode** to **AC**. The **AC setup** shares the VRMs and series links with DC mode and
-adds:
-
-* **Capacitors tab**: RLC models (capacitance, ESL, ESR) for the decoupling capacitors, each
-  shared by a group of identical parts, or the maker's SPICE model. **Models from values**
-  starts one model per capacitor value, and **Import…** / **Export…** move a model between
-  setups as a YAML file named after it. Models can be derated for DC bias, temperature,
-  aging and tolerance. **Important**: model capacitors of the same value in different case
-  sizes separately.
-* **Probes tab**: where to plot the PDN impedance, usually a device's supply and ground pins,
-  each with a **flat** or **custom** target. The **Target Impedance/Frequency Calculator**
-  works out a flat target from the device's voltage tolerance and load step, following Smith
-  et al., ["Power Distribution System Design Methodology and Capacitor Selection for Modern
-  CMOS Technology"](https://doi.org/10.1109/6040.784476), IEEE Trans. Adv. Packaging, 1999.
-  Targets apply above the VRM's **Control loop bandwidth**.
-* **Sweep tab**: frequency range and resolution, and the capacitor deratings.
-* **Mesh tab**: mesh size and minimum edge at plated holes. Ground far from the rail is
-  meshed coarsely, every piece of copper that can carry current kept.
-
-| Capacitor models | Target calculator |
-|---|---|
-| ![Capacitors tab](docs/images/ac_capacitors.png) | ![Target impedance calculator](docs/images/ac_target_calc.png) |
-
-Pick the **Rail** and **Ground** and click **Solve rail**. The rail's copper and its ground
-are field-solved, so plane resistance, spreading inductance, plane capacitance, cavity
-resonances and via inductance all come from the layout; the capacitors and series links are
-attached at every frequency. The VRM is not modeled as an impedance (the open-loop PDN).
-**Important:** AC analysis is a massive compute problem. Many probes and a finer mesh
-increase simulation time dramatically.
-
-The **Impedance** tab plots |Z| against frequency for every probe, with its target, and a
-cursor to read values. The **Board map** tab shows the mesh, probes and capacitors, and the
-**Transient** tab estimates each probe's undershoot and overshoot for its load step.
-**Report**, **Export CSV…** and **Save results…** work as in DC mode.
-
-![The Board map of the core rail's solve: the VCORE and GND mesh, the probe and the capacitors by model](docs/images/ac_board_map.png)
-
-![The impedance plot of the example's 0.9 V core rail against its custom target, with the cursor on the anti-resonance and its values in the Info box](docs/images/ac_impedance.png)
-
-### 7. Coupled Noise
-
-Switch **Mode** to **Noise**. The **Coupled Noise setup** treats one of the setup's
-**Switcher** VRMs as an *aggressor* and the signal nets you name as *victims*. The
-screenshots below are the `examples/validation/coupled_noise` example: a 12 V to 1.8 V,
-1 MHz buck over a ground plane, with three victims. Open its snapshot to try it.
-
-* **Aggressors tab**: **Add** makes an aggressor from a switcher VRM and fills it in from the
-  board: the switching device, inductor, switch node and capacitors. Give the switching
-  frequency and edge times; datasheet values such as Coss and Qrr are optional. KiPI traces
-  each capacitor's hot loop through the copper for its inductance and its coupling.
-* **Victims tab**: each victim is a net with its driver and receiver pins and a **Type**
-  (CMOS, open drain, terminated, LVDS, analog input or undriven) and **Logic level**, which
-  set its loading and noise margin.
-* **Capacitors tab**: the same capacitor models as AC mode.
-* **Settings tab**: harmonics, damping, victim resolution and the **Board model**, the slow
-  but more accurate field model of the converter's copper (untick it for a quick look).
-
-Pick the **Aggressor** and click **Solve**. Tick **Scan nearby nets** to also check every
-signal net near the aggressor. The **Waveforms** tab plots the switch node with its ringing,
-the inductor and capacitor currents and the rail ripple, in time or as a spectrum.
-
-![The Waveforms tab: the buck's switch node over two periods, ringing at 179 MHz on each hard rising edge while the soft falling edge settles at once](docs/images/noise_waveforms.png)
-
-The **Results** table lists each victim's peak noise at its receiver, its margin, the
-dominant mechanism and PASS or FAIL. **Victim noise** plots the noise, as a whole or by
-mechanism (capacitive, inductive, common ground).
-
-![Victim noise for SIG_SW: the superposition at the receiver with its capacitive and inductive parts, and the results table](docs/images/noise_victim.png)
-
-**Victim held high and low** draws the noise riding on the receiver's high and low levels
-against its thresholds.
-
-![SIG_SW held high and low, with the noise riding on each level](docs/images/noise_states.png)
-
-**Coupling in 3D** colors the selected victim's traces by their share of the peak noise, so
-the pieces to move stand out. **Hot loops in 3D** draws the capacitor loops' current, and
-**Fields in 3D** the H and E fields over the board, with near-field hotspots and a first
-radiated estimate against CISPR 32 class B. Victims crossing a split in their reference
-plane are noted.
-
-![Coupling in 3D for SIG_LOOP: the victim colored by its share of the 631 mV peak, beside the capacitor loops](docs/images/noise_coupling_3d.png)
-
-The mechanisms point to different fixes: capacitive noise comes from the switch node's
-dV/dt, inductive noise from the hot loop's dI/dt and common noise from the switching
-current's return. **Report** and **Save results…** work as in the other modes.
-
-### Tips and troubleshooting
-
-* **A load shows DISCONNECTED** usually means unrouted copper, an unfilled zone, or a
-  missing series link for a part between two power nets.
-* **Unexpected voltage drop:** thermal reliefs, necked traces, via counts and anti-pads in
-  planes dominate DC drop; the Current density view with Arrows shows the bottleneck.
-* **Slow solves:** raise **Max edge**, or analyze fewer nets at a time. On Intel x86, install
-  the PARDISO solver (above).
-* **"KiPI works with one KiCad at a time"** although only one is open: a KiCad that did not
-  exit cleanly may still be running; end it in the task manager.
-* **Logs:** each session writes to `kipi/kipi-<date>-<time>-<pid>.log` in the temporary
-  folder, with a matching `.crash.log`. Attach both, and **About → Copy version info**, to
-  bug reports. The [user guide](docs/help.html) has more troubleshooting.
-* **Have Fun:** The author asks that you share what projects this package has simulated, and what power integrity issues you have found with it. Conductor simulation gives incredible insight into how PCBs actually function in practice. See what happens when you pump 10 amps into a 5 mil trace with the temperature results view.
-
-## Development
-
-From a checkout, KiPI runs standalone, or as the plugin against the running PCB editor:
+把 **Mode** 切到 **AC**。AC 设置与 DC 共享 VRM 和串联器件，并增加：
+
+* **Capacitors**：去耦电容的 RLC 模型（电容、ESL、ESR），或厂商 SPICE 模型；可按 DC 偏置、温度、老化和容差降额。不同封装尺寸的同容值电容请分别建模。
+* **Probes**：PDN 阻抗的观测点，通常是器件的电源和地引脚，可设置平坦或自定义目标阻抗；目标阻抗计算器可根据电压容差和负载阶跃计算目标。
+* **Sweep**：频率范围、分辨率和电容降额。
+* **Mesh**：网格尺寸和镀通孔处的最小边长。
+
+选择 **Rail** 和 **Ground**，点击 **Solve rail**。铜皮和地会做场求解，平面电阻、扩展电感、平面电容、腔体谐振和过孔电感都来自实际布局；电容和串联器件在每个频点接入。AC 分析计算量较大，探针多、网格细会显著增加时间。
+
+**Impedance** 标签绘制每个探针的 |Z| 与频率，并显示目标；**Board map** 显示网格、探针和电容；**Transient** 估算每个探针在负载阶跃下的下冲/过冲。
+
+### 7. 耦合噪声
+
+把 **Mode** 切到 **Noise**。耦合噪声设置把一个 **Switcher** VRM 当作干扰源，把指定的信号网络当作受害网络。
+
+* **Aggressors**：从 switcher VRM 创建干扰源，自动填入开关器件、电感、开关节点和电容；填写开关频率和边沿时间，Coss、Qrr 等数据手册参数可选。
+* **Victims**：每个受害网络填写驱动端、接收端、类型（CMOS、开漏、端接、LVDS、模拟输入或未驱动）和逻辑电平，用于计算负载和噪声容限。
+* **Capacitors**：与 AC 模式相同的电容模型。
+* **Settings**：谐波数、阻尼、受害网络分辨率和 **Board model**（更慢但更准确的变换器铜皮场模型）。
+
+选择 **Aggressor** 后点击 **Solve**。勾选 **Scan nearby nets** 可同时检查干扰源附近的全部信号网络。**Waveforms** 显示开关节点振铃、电感和电容电流以及电源纹波（时域或频谱）；**Results** 列出每个受害网络的峰值噪声、裕量、主导机制和 PASS/FAIL。
+
+**Victim noise** 可按机制（电容、电感、共地）分解；**Victim held high and low** 显示噪声叠加在高/低电平上的情况；**Coupling in 3D** 按噪声贡献给受害网络走线着色；**Hot loops in 3D** 和 **Fields in 3D** 显示电流环路与 H/E 场。
+
+### 常见问题
+
+* **负载显示 DISCONNECTED**：通常是铜皮未布通、区域未填充，或两个电源网络之间缺少串联器件。
+* **压降异常**：热焊盘、颈缩走线、过孔数量和平面反焊盘通常是主因；打开 **Current density + Arrows** 查看瓶颈。
+* **求解慢**：增大 **Max edge**，减少一次分析的网络数；Windows/Linux x86-64 可安装 PARDISO。
+* **“KiPI works with one KiCad at a time”**：可能有未正常退出的 KiCad 进程，请在任务管理器中结束。
+* **日志**：每次会话在临时目录写入 `kipi/kipi-<日期>-<时间>-<pid>.log` 和对应的 `.crash.log`；反馈问题时附上日志和 **About → Copy version info**。
+
+## 开发与测试
+
+从源码运行：
 
 ```powershell
-python -m venv --system-site-packages .venv   # use KiCad's bundled python.exe
+python -m venv --system-site-packages .venv   # 使用 KiCad 自带的 python.exe
 .venv\Scripts\pip install -r requirements.txt -r requirements-standalone.txt -r requirements-dev.txt
-.venv\Scripts\python -m kipi tests\data\synthetic.kipi.json   # standalone, opening a board
-$env:KIPI_HOST = "plugin"; .venv\Scripts\python -m kipi        # the plugin: connect to KiCad
-.venv\Scripts\python -m kipi --dump board.kipi.json.gz   # extract from KiCad only, no window
+.venv\Scripts\python -m kipi tests\data\synthetic.kipi.json   # 独立运行并打开板卡
+$env:KIPI_HOST = "plugin"; .venv\Scripts\python -m kipi        # 作为插件连接 KiCad
+.venv\Scripts\python -m kipi --dump board.kipi.json.gz         # 只提取板卡，不打开窗口
 .venv\Scripts\python -m pytest tests
-.venv\Scripts\ruff check .                    # lint, as CI does (ruff check . --fix fixes most)
+.venv\Scripts\ruff check .
 ```
 
-`requirements.txt` is what KiCad installs into the plugin's venv (kicad-python only), and
-`requirements-standalone.txt` what KiPI installs on top on the first click, and the
-launcher into its own environment; `tests/core/test_requirements.py`
-keeps them in step with `pyproject.toml`. After changing them, run
-`python .github/scripts/dep_sizes.py`.
+`requirements.txt` 是 KiCad 插件环境启动所需的最小依赖（`kicad-python`）；`requirements-standalone.txt` 是 KiPI 首次安装时补齐的依赖；`tests/core/test_requirements.py` 保证它们与 `pyproject.toml` 一致。
 
-The tests follow the package (`tests/core`, `tests/dc`, `tests/ac`, `tests/noise`,
-`tests/sources`, `tests/gui`, `tests/scripts`). `tests/accuracy` solves the boards in
-[`examples/validation`](examples/validation) and compares the results with hand
-calculations, to help gain confidence that an open-source tool can compare to professional
-tools:
+测试按包组织：`tests/core`、`tests/dc`、`tests/ac`、`tests/noise`、`tests/sources`、`tests/gui`、`tests/scripts`。`tests/accuracy` 会对 `examples/validation` 中的板卡做手算对比，用于验证开源实现与专业工具的一致性。
 
-| Board | Checks |
+## 代码结构
+
+| 路径 | 作用 |
 |---|---|
-| `skinny_traces` | 0.15 mm and 0.1 mm tracks on outer and inner layers (ρL/wt), an arc track (annular sector) |
-| `right_angle` | an L route and a Z route: 0.5587 squares per right-angle corner |
-| `layer_change` | a strip dropping from F.Cu to In2.Cu through a row of vias: barrels in parallel, current crowding, equal sharing |
-| `planes` | two pads on a disc-shaped inner plane (method of images); one strip on two layers of different weights |
-| `power_chain` | source, switcher, ferrite series link and remote-sensed LDO over a ground strip: every voltage and current |
-| `ac_plane` | plane-pair capacitance ε₀εrA/h and the first cavity resonance c/(2a√εr) |
-| `ac_decap` | a mounted capacitor as a series RLC: low-frequency capacitance, mounted inductance, ESR at resonance |
-| `ac_ferrite` | a ferrite (R + L link) feeding a small plane: lumped impedance and its LC resonance |
+| `kipi_entry.py`、`plugin.json` | KiCad IPC 插件入口（以插件方式运行 KiPI） |
+| `kipi/__main__.py` | `python -m kipi` / `kipi`：独立运行，或设置 `KIPI_HOST=plugin` 作为插件运行 |
+| `kipi_launcher.py`、`.pyw` | 独立版启动器：首次启动配置环境，然后在其中启动 KiPI |
+| `kipi/launcher/` | 启动器实现：环境、Python 发现、包列表、安装器和设置界面 |
+| `kipi/host.py` | 判断 KiPI 是以插件还是独立版启动 |
+| `kipi/core/` | 各分析共享：板卡模型、铜皮几何、网格、稀疏求解器、3D 网格和进度报告 |
+| `kipi/sources/` | 板卡来源：运行中的 KiCad（IPC）、`.kicad_pcb`、ODB++、HyperLynx 和快照 |
+| `kipi/dc/` | DC 分析：传导 FEM、电源树设置与求解、热分析、报告和结果视图 |
+| `kipi/ac/` | AC 分析：PDN 阻抗扫频、场求解、目标阻抗、瞬态、报告和面板 |
+| `kipi/noise/` | 耦合噪声：波形、热环路寄生、耦合提取、受害网络求解、报告和面板 |
+| `kipi/gui/` | PySide6 应用外壳：主窗口、模式切换、3D 视图、工作线程、About 和 Help |
+| `kipi/gui/assistant/` | AI 助手：供应商、工具、附件、按工程对话和面板 |
+| `docs/help.html` | **Help** 打开的离线用户指南 |
+| `docs/solver-guide.html` | 求解器指南：PI 背景和求解原理 |
+| `examples/` | 示例板卡快照、PI 设置和生成脚本 |
 
-After changing a board there, rerun `python examples/validation/make_boards.py [name]` (or
-`python examples/multiphase_buck/make_board.py` for the example) and commit its files.
+## 许可证
 
-CI runs ruff and the test suite for every push and pull request on Windows, Linux (Python
-3.10 to 3.13) and macOS; the accuracy tests run for pull requests into `main`.
-`tests/helpers/kicad_fake.py` stands in for each KiCad version from 9.0.0 to 10.0.6.
+KiPI 是自由软件：你可以按照 [GNU General Public License](LICENSE)（GPL-3.0-or-later）的条款重新发布和修改它。它不提供任何担保；详见许可证。Copyright © 2026 Drew Maatman。
 
-### Releases
+**网格划分说明。** KiPI 通过 [`triangle`](https://pypi.org/project/triangle/) Python 包使用 Jonathan Shewchuk 的 [Triangle](https://www.cs.cmu.edu/~quake/triangle.html) 对铜皮划分网格。Triangle 并非 OSI 意义上的开源软件：其作者允许免费使用和再发布，但**未经作者许可不得销售或包含在商业产品中**。将 KiPI 用于自己的设计工作没有问题；网格代码隔离在 `kipi/core/mesh/`。
 
-Publishing a GitHub release runs `.github/workflows/release.yml`, which attaches three
-files:
-- `KiPI-<tag>.zip`, for manual installs.
-- `KiPI-<tag>-pcm.zip`, the same files for KiCad's Plugin and Content Manager.
-- `metadata.json`, that version's entry with its sha256 and sizes.
+除 PySide6（LGPL-3.0）外，其余依赖均为宽松许可证，与 GPL 兼容。
 
-The PCM metadata that stays the same from release to release is in
-`.github/pcm/metadata.json`. To publish a version in PCM, add its entry (the job summary
-shows it too) to `packages/com.github.drewsum.kipi/metadata.json` in a merge request to
-[KiCad's metadata repository](https://gitlab.com/kicad/addons/metadata). The first time,
-add `resources/kipi_64.png` there as `icon.png` as well. Once a version is merged, its zip
-can't change, so never replace a release's PCM zip. Tag a release `vX.Y.Z`: a tag like
-`v1.0.0-rc1` gets the manual zip only, since PCM version numbers can't have suffixes.
-
-### Codebase Layout
-
-| Path | Purpose |
-|---|---|
-| `kipi_entry.py`, `plugin.json` | KiCad IPC plugin action (runs KiPI as the plugin) |
-| `kipi/__main__.py` | `python -m kipi` / `kipi`: standalone, or the plugin with `KIPI_HOST=plugin` |
-| `kipi_launcher.py`, `.pyw` | Standalone launcher: sets up KiPI's environment on the first start, then starts KiPI in it |
-| `kipi/launcher/` | The launcher itself, standard library only: environment, Python discovery, package list, installer and setup screens (Tk, wx, console, the desktop's dialogs); the plugin's first-click setup and KiCad's plugin environment |
-| `kipi/host.py` | Plugin or standalone: how KiPI was started |
-| `kipi/core/` | Shared by every analysis: board model, copper geometry, meshing, sparse solvers, 3D meshes, progress reporting |
-| `kipi/sources/` | Where boards come from: the running KiCad (IPC), `.kicad_pcb` files, ODB++, HyperLynx and snapshots |
-| `kipi/dc/` | DC analysis: conduction FEM, power-tree setup and solve, thermal, reports, results views and panel |
-| `kipi/ac/` | AC analysis: PDN impedance over frequency, field solver and sweep, targets, transient, report and panel |
-| `kipi/noise/` | Coupled Noise analysis: waveforms, hot loop parasitics, coupling extraction, victim solves, report and panel |
-| `kipi/gui/` | PySide6 application shell shared by every mode: main window, mode switch, 3D viewer, worker threads, About and Help |
-| `docs/help.html` | The user guide opened by **Help**; a single offline HTML file |
-| `docs/solver-guide.html` | The Solver Guide: PI background and how the solvers work |
-| `kipi/compat.py` | Opens results files saved by earlier versions, from before modules moved |
-| `examples/` | Example boards as snapshots with their PI setups, and the scripts that generate them |
-
-## License
-
-KiPI is free software: you can redistribute it and/or modify it under the terms of the
-[GNU General Public License](LICENSE) as published by the Free Software Foundation, either
-version 3 of the License, or (at your option) any later version. It is distributed WITHOUT
-ANY WARRANTY; see the license for details. Copyright © 2026 Drew Maatman.
-
-**Note on the mesher.** KiPI meshes copper with Jonathan Shewchuk's
-[Triangle](https://www.cs.cmu.edu/~quake/triangle.html), through the
-[`triangle`](https://pypi.org/project/triangle/) Python package. Triangle is not open source
-in the OSI sense. Its author's terms allow free use and redistribution, but it **may not be
-sold or included in commercial products without a license from its author**. Using KiPI for
-your own design work is fine. The meshing code is isolated in `kipi/core/mesh/` for this reason.
-
-The other dependencies are under permissive licenses, apart from PySide6 (LGPL-3.0). All of
-them are compatible with the GPL.
-
-The author of KiPI prohibits the package from inclusion in commercial software. Use it, fork it, and modify it to your heart's content.
+原项目地址：<https://github.com/drewsum/KiPI>
