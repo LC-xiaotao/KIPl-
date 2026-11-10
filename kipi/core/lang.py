@@ -16,13 +16,24 @@ _SYSTEM: Optional[bool] = None      # the system locale's answer, read once
 
 def chinese() -> bool:
     """Whether KiPI speaks Chinese. ``KIPI_LANG`` is read on every call (it is cheap, and
-    a change to it then always counts); only the system locale is remembered."""
+    a change to it then always counts); then the language chosen in KiPI's menu; only the
+    system locale is remembered."""
     global _SYSTEM
     choice = os.environ.get("KIPI_LANG", "").strip().lower()
     if choice in ("en", "english", "en_us", "en-us", "en_gb", "en-gb"):
         return False
     if choice.startswith("zh"):
         return True
+    try:
+        from qtpy.QtCore import QSettings
+        saved = str(QSettings("KiPI", "KiPI").value("ui/language", "system") or "system")
+        saved = saved.strip().lower()
+        if saved.startswith("zh"):
+            return True
+        if saved in ("en", "english", "en_us", "en-us", "en_gb", "en-gb"):
+            return False
+    except Exception:  # noqa: BLE001 - no Qt, or no settings: fall back to the system
+        pass
     if _SYSTEM is None:
         try:
             from qtpy.QtCore import QLocale

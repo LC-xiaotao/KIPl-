@@ -13,8 +13,15 @@ os.environ["KIPI_LANG"] = "en"
 
 @pytest.fixture(autouse=True)
 def isolated_kipi_home(monkeypatch, tmp_path_factory):
-    """Tests never read or write this machine's assistant conversations or data folder."""
+    """Tests never read or write this machine's assistant conversations or settings."""
     monkeypatch.setenv("KIPI_HOME", str(tmp_path_factory.getbasetemp() / "kipi-home"))
+    try:
+        from qtpy.QtCore import QSettings
+        QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+        QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope,
+                          str(tmp_path_factory.getbasetemp() / "settings"))
+    except Exception:                   # no Qt binding in this test run
+        pass
 
 
 @pytest.fixture(autouse=True)

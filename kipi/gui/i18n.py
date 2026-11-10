@@ -32,29 +32,83 @@ _SEEN: "weakref.WeakSet" = weakref.WeakSet()
 _MISSING_SEEN: set = set()
 _FILTER = None
 _TRANSLATING = False
+_QT_TRANSLATOR = None
+_PATCHED = False
 
 #: A shortcut tacked onto a tooltip by ``with_keys``: "Open… (Ctrl+O)".
 _SHORTCUT = re.compile(r"^(.*?)\s*\(([A-Za-z0-9+][A-Za-z0-9+ ]*)\)$")
 #: A tab-separated accelerator Qt puts in an action's text: "Open…\tCtrl+O".
 _TAB_SHORTCUT = re.compile(r"^(.*?)\t(.+)$")
 
+PREFERENCE_KEY = "ui/language"
+
+
+def system_language() -> str:
+    """The language the computer is set to: ``zh_CN`` or ``en``."""
+    try:
+        from qtpy.QtCore import QLocale
+        return "zh_CN" if QLocale.system().name().lower().startswith("zh") else "en"
+    except Exception:  # noqa: BLE001 - no Qt yet: Chinese is this build's default
+        return "zh_CN"
+
+
+def preference() -> str:
+    """The chosen language: ``system``, ``zh_CN`` or ``en``.
+
+    ``KIPI_LANG`` still wins, so CI and scripts can force a language; otherwise the
+    choice saved by the language menu, then the computer's own language.
+    """
+    choice = os.environ.get("KIPI_LANG", "").strip().lower()
+    if choice:
+        if choice.startswith("zh"):
+            return "zh_CN"
+        if choice in ("en", "english", "en_us", "en-us", "en_gb", "en-gb"):
+            return "en"
+    try:
+        from qtpy.QtCore import QSettings
+        saved = str(QSettings("KiPI", "KiPI").value(PREFERENCE_KEY, "system") or "system")
+    except Exception:  # noqa: BLE001
+        saved = "system"
+    saved = saved.strip().lower()
+    if saved.startswith("zh"):
+        return "zh_CN"
+    if saved in ("en", "english", "en_us", "en-us", "en_gb", "en-gb"):
+        return "en"
+    return "system"
+
 
 def language() -> bool:
     """Whether the Chinese interface is on."""
     global _ENABLED
     if _ENABLED is None:
-        choice = os.environ.get("KIPI_LANG", "").strip().lower()
-        if choice in ("en", "english", "en_us", "en-gb"):
-            _ENABLED = False
-        elif choice.startswith("zh"):
-            _ENABLED = True
-        else:
-            try:
-                from qtpy.QtCore import QLocale
-                _ENABLED = QLocale.system().name().lower().startswith("zh")
-            except Exception:  # noqa: BLE001 - no Qt yet: Chinese is this build's default
-                _ENABLED = True
+        choice = preference()
+        _ENABLED = (system_language().startswith("zh") if choice == "system"
+                    else choice.startswith("zh"))
     return _ENABLED
+
+
+def set_preference(choice: str) -> bool:
+    """Save and apply ``system``/``zh_CN``/``en`` now. Returns whether it changed."""
+    install()
+    choice = choice if choice in ("system", "zh_CN", "en") else "system"
+    before = language()
+    try:
+        from qtpy.QtCore import QSettings
+        QSettings("KiPI", "KiPI").setValue(PREFERENCE_KEY, choice)
+    except Exception:  # noqa: BLE001
+        pass
+    # Reports read KIPI_LANG; keep the session's choice there too. A later start reads
+    # the saved preference when the environment does not carry one.
+    if choice == "system":
+        os.environ.pop("KIPI_LANG", None)
+    else:
+        os.environ["KIPI_LANG"] = choice
+    global _ENABLED
+    _ENABLED = None
+    after = language()
+    _install_qt_translations(after)
+    retranslate_all()
+    return before != after
 
 
 def _catalog() -> dict:
@@ -81,6 +135,76 @@ def _lookup(text: str) -> Optional[str]:
         if hit is not None:
             return hit
     return None
+
+
+# ---------------------------------------------------------------------------
+# The English source of each on-screen string
+# ---------------------------------------------------------------------------
+
+def _property(key: str) -> str:
+    return f"kipi_i18n_{key}"
+
+
+def _source_text(obj, key: str, current: Any) -> Any:
+    """The English text behind ``current``: remembered on the object, or ``current``."""
+    if not isinstance(current, str):
+        return current
+    try:
+        stored = obj.property(_property(key))
+    except Exception:                   # noqa: BLE001 - not a QObject with properties
+        return current
+    if stored is None:
+        try:
+            obj.setProperty(_property(key), current)
+        except Exception:               # noqa: BLE001
+            return current
+        return current
+    return str(stored)
+
+
+def _source_list(obj, key: str, current: list) -> list:
+    """The English texts behind a list (a combo's items, a tab bar's tabs)."""
+    try:
+        stored = obj.property(_property(key))
+    except Exception:                   # noqa: BLE001
+        stored = None
+    try:
+        stored = list(stored) if stored is not None else []
+    except TypeError:
+        stored = []
+    if len(stored) != len(current):
+        stored = [str(v) for v in current]
+        try:
+            obj.setProperty(_property(key), list(stored))
+        except Exception:               # noqa: BLE001
+            return stored
+    return [str(v) for v in stored]
+
+
+def _store_list(obj, key: str, values: list) -> None:
+    try:
+        obj.setProperty(_property(key), [str(v) for v in values])
+    except Exception:                   # noqa: BLE001
+        pass
+
+
+def _apply_text(obj, key: str, getter, setter, enabled: bool) -> None:
+    original = _source_text(obj, key, getter())
+    if not isinstance(original, str):
+        return
+    target = tr(original) if enabled else original
+    if target != getter():
+        setter(target)
+
+
+def _apply_list(obj, key: str, current_getter, item_getter, item_setter,
+                enabled: bool) -> None:
+    current = list(current_getter())
+    originals = _source_list(obj, key, current)
+    for i, original in enumerate(originals):
+        target = tr(original) if enabled else original
+        if item_getter(i) != target:
+            item_setter(i, target)
 
 
 def tr(text: Any) -> Any:
@@ -176,29 +300,181 @@ def _log_missing(text: str) -> None:
 # Qt hooks
 # ---------------------------------------------------------------------------
 
-def _wrap_setter(cls, name: str, at: int = 0, each: bool = False) -> None:
-    """Translate argument ``at`` of ``cls.name``; ``each`` for a list argument."""
+def _wrap_setter(cls, name: str, at: int = 0, each: bool = False,
+                 key: str = "text") -> None:
+    """Remember the English argument of ``cls.name``, then translate it."""
     original = getattr(cls, name, None)
     if original is None:
         return
 
     def wrapper(self, *args, **kwargs):
+        if _TRANSLATING:
+            return original(self, *args, **kwargs)
         args = list(args)
         if len(args) > at:
-            if each:
-                args[at] = [tr(v) for v in args[at]] if isinstance(args[at], (list, tuple)) else args[at]
-            else:
+            if each and isinstance(args[at], (list, tuple)):
+                _store_list(self, key, list(args[at]))
+                args[at] = [tr(v) for v in args[at]]
+            elif isinstance(args[at], str):
+                _source_text(self, key, args[at])
                 args[at] = tr(args[at])
         if kwargs:
-            for key in ("text", "title", "label", "toolTip"):
-                if key in kwargs:
-                    kwargs[key] = tr(kwargs[key])
+            for k in ("text", "title", "label", "toolTip"):
+                if k in kwargs and isinstance(kwargs[k], str):
+                    _source_text(self, key, kwargs[k])
+                    kwargs[k] = tr(kwargs[k])
         return original(self, *args, **kwargs)
 
     try:
         setattr(cls, name, wrapper)
     except (TypeError, AttributeError):
         pass
+
+
+def _wrap_combo() -> None:
+    """Keep each combo item's English text beside its translated one."""
+    from qtpy.QtWidgets import QComboBox
+
+    def _sources(combo):
+        return _source_list(combo, "items",
+                            [combo.itemText(i) for i in range(combo.count())])
+
+    def add_item(self, *args, **kwargs):
+        if _TRANSLATING or not args or not isinstance(args[0], str):
+            return add_item.original(self, *args, **kwargs)
+        sources = _sources(self)
+        sources.append(args[0])
+        _store_list(self, "items", sources)
+        args = list(args)
+        args[0] = tr(args[0])
+        return add_item.original(self, *args, **kwargs)
+
+    def add_items(self, *args, **kwargs):
+        if _TRANSLATING or not args or not isinstance(args[0], (list, tuple)):
+            return add_items.original(self, *args, **kwargs)
+        sources = _sources(self)
+        sources.extend(str(v) for v in args[0])
+        _store_list(self, "items", sources)
+        args = list(args)
+        args[0] = [tr(v) for v in args[0]]
+        return add_items.original(self, *args, **kwargs)
+
+    def insert_item(self, *args, **kwargs):
+        if _TRANSLATING or len(args) < 2 or not isinstance(args[1], str):
+            return insert_item.original(self, *args, **kwargs)
+        sources = _sources(self)
+        index = max(0, min(int(args[0]), len(sources)))
+        sources.insert(index, args[1])
+        _store_list(self, "items", sources)
+        args = list(args)
+        args[1] = tr(args[1])
+        return insert_item.original(self, *args, **kwargs)
+
+    def set_item_text(self, *args, **kwargs):
+        if _TRANSLATING or len(args) < 2 or not isinstance(args[1], str):
+            return set_item_text.original(self, *args, **kwargs)
+        sources = _sources(self)
+        index = int(args[0])
+        if 0 <= index < len(sources):
+            sources[index] = args[1]
+            _store_list(self, "items", sources)
+        args = list(args)
+        args[1] = tr(args[1])
+        return set_item_text.original(self, *args, **kwargs)
+
+    def remove_item(self, *args, **kwargs):
+        if not _TRANSLATING and args:
+            sources = _sources(self)
+            index = int(args[0])
+            if 0 <= index < len(sources):
+                del sources[index]
+                _store_list(self, "items", sources)
+        return remove_item.original(self, *args, **kwargs)
+
+    def clear(self):
+        if not _TRANSLATING:
+            _store_list(self, "items", [])
+        return clear.original(self)
+
+    for name, function in (("addItem", add_item), ("addItems", add_items),
+                           ("insertItem", insert_item), ("setItemText", set_item_text),
+                           ("removeItem", remove_item), ("clear", clear)):
+        original = getattr(QComboBox, name, None)
+        if original is None:
+            continue
+        function.original = original
+        try:
+            setattr(QComboBox, name, function)
+        except (TypeError, AttributeError):
+            pass
+
+
+def _wrap_tabs() -> None:
+    """Keep each tab's English text beside its translated one."""
+    from qtpy.QtWidgets import QTabWidget
+
+    def _sources(tabs):
+        return _source_list(tabs, "tabs",
+                            [tabs.tabText(i) for i in range(tabs.count())])
+
+    def add_tab(self, *args, **kwargs):
+        if _TRANSLATING or len(args) < 2 or not isinstance(args[1], str):
+            return add_tab.original(self, *args, **kwargs)
+        sources = _sources(self)
+        sources.append(args[1])
+        _store_list(self, "tabs", sources)
+        args = list(args)
+        args[1] = tr(args[1])
+        return add_tab.original(self, *args, **kwargs)
+
+    def insert_tab(self, *args, **kwargs):
+        if _TRANSLATING or len(args) < 3 or not isinstance(args[2], str):
+            return insert_tab.original(self, *args, **kwargs)
+        sources = _sources(self)
+        index = max(0, min(int(args[0]), len(sources)))
+        sources.insert(index, args[2])
+        _store_list(self, "tabs", sources)
+        args = list(args)
+        args[2] = tr(args[2])
+        return insert_tab.original(self, *args, **kwargs)
+
+    def set_tab_text(self, *args, **kwargs):
+        if _TRANSLATING or len(args) < 2 or not isinstance(args[1], str):
+            return set_tab_text.original(self, *args, **kwargs)
+        sources = _sources(self)
+        index = int(args[0])
+        if 0 <= index < len(sources):
+            sources[index] = args[1]
+            _store_list(self, "tabs", sources)
+        args = list(args)
+        args[1] = tr(args[1])
+        return set_tab_text.original(self, *args, **kwargs)
+
+    def remove_tab(self, *args, **kwargs):
+        if not _TRANSLATING and args:
+            sources = _sources(self)
+            index = int(args[0])
+            if 0 <= index < len(sources):
+                del sources[index]
+                _store_list(self, "tabs", sources)
+        return remove_tab.original(self, *args, **kwargs)
+
+    def clear(self):
+        if not _TRANSLATING:
+            _store_list(self, "tabs", [])
+        return clear.original(self)
+
+    for name, function in (("addTab", add_tab), ("insertTab", insert_tab),
+                           ("setTabText", set_tab_text), ("removeTab", remove_tab),
+                           ("clear", clear)):
+        original = getattr(QTabWidget, name, None)
+        if original is None:
+            continue
+        function.original = original
+        try:
+            setattr(QTabWidget, name, function)
+        except (TypeError, AttributeError):
+            pass
 
 
 def _wrap_static(cls, name: str, title_at: int = 1, text_at: int = 2) -> None:
@@ -221,40 +497,51 @@ def _wrap_static(cls, name: str, title_at: int = 1, text_at: int = 2) -> None:
 
 
 def _patch_widgets() -> None:
+    global _PATCHED
+    if _PATCHED:
+        return
+    _PATCHED = True
     from qtpy import QtGui, QtWidgets as W
 
-    _wrap_setter(W.QLabel, "setText")
-    _wrap_setter(W.QAbstractButton, "setText")
-    _wrap_setter(W.QWidget, "setWindowTitle")
-    _wrap_setter(W.QWidget, "setToolTip")
-    _wrap_setter(W.QGroupBox, "setTitle")
-    _wrap_setter(W.QMenu, "setTitle")
-    _wrap_setter(QtGui.QAction, "setText")
-    _wrap_setter(QtGui.QAction, "setToolTip")
-    _wrap_setter(W.QLineEdit, "setPlaceholderText")
-    _wrap_setter(W.QAbstractSpinBox, "setSpecialValueText")
-    _wrap_setter(W.QStatusBar, "showMessage")
-    _wrap_setter(W.QTabWidget, "setTabText", at=1)
-    _wrap_setter(W.QTabWidget, "addTab", at=1)
-    _wrap_setter(W.QTabWidget, "insertTab", at=2)
-    _wrap_setter(W.QTableWidget, "setHorizontalHeaderLabels", each=True)
-    _wrap_setter(W.QTableWidget, "setVerticalHeaderLabels", each=True)
-    _wrap_setter(W.QComboBox, "addItem")
-    _wrap_setter(W.QComboBox, "addItems", each=True)
-    _wrap_setter(W.QComboBox, "insertItem", at=1)
+    _wrap_setter(W.QLabel, "setText", key="text")
+    _wrap_setter(W.QAbstractButton, "setText", key="text")
+    _wrap_setter(W.QWidget, "setWindowTitle", key="title")
+    _wrap_setter(W.QWidget, "setToolTip", key="tooltip")
+    _wrap_setter(W.QGroupBox, "setTitle", key="title")
+    _wrap_setter(W.QMenu, "setTitle", key="title")
+    _wrap_setter(QtGui.QAction, "setText", key="text")
+    _wrap_setter(QtGui.QAction, "setToolTip", key="tooltip")
+    _wrap_setter(W.QLineEdit, "setPlaceholderText", key="placeholder")
+    _wrap_setter(W.QAbstractSpinBox, "setSpecialValueText", key="special")
+    _wrap_setter(W.QStatusBar, "showMessage", key="status")
+    _wrap_setter(W.QTableWidget, "setHorizontalHeaderLabels", each=True,
+                 key="horizontal_headers")
+    _wrap_setter(W.QTableWidget, "setVerticalHeaderLabels", each=True,
+                 key="vertical_headers")
+    _wrap_combo()
+    _wrap_tabs()
     for name in ("information", "warning", "critical", "question"):
         _wrap_static(W.QMessageBox, name)
 
 
-def _qt_translations() -> None:
+def _install_qt_translations(enabled: bool) -> None:
     """Qt's own Chinese translations: standard buttons, file dialogs, message boxes."""
+    global _QT_TRANSLATOR
     try:
         from qtpy.QtCore import QCoreApplication, QLibraryInfo, QLocale, QTranslator
     except Exception:  # noqa: BLE001
         return
+    if _QT_TRANSLATOR is not None:
+        try:
+            QCoreApplication.removeTranslator(_QT_TRANSLATOR)
+        except Exception:  # noqa: BLE001
+            pass
+        _QT_TRANSLATOR = None
+    if not enabled:
+        return
     name = QLocale.system().name()
     if not name.lower().startswith("zh"):
-        name = "zh_CN"          # KIPI_LANG forced Chinese on a non-Chinese system
+        name = "zh_CN"          # Chinese chosen on a non-Chinese system
     folder = None
     try:
         folder = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
@@ -270,8 +557,7 @@ def _qt_translations() -> None:
         if translator.load(stem, folder):
             QCoreApplication.installTranslator(translator)
             # Keep it alive: Qt does not own the Python object.
-            kept = getattr(_qt_translations, "_translators", [])
-            _qt_translations._translators = kept + [translator]
+            _QT_TRANSLATOR = translator
             break
 
 
@@ -316,9 +602,9 @@ def _keep_filter():
 
 
 def translate_tree(root) -> None:
-    """Translate ``root`` and every widget/action below it, once."""
+    """Translate (or restore) ``root`` and every widget/action below it."""
     global _TRANSLATING
-    if not language() or root is None or _TRANSLATING:
+    if root is None or _TRANSLATING:
         return
     from qtpy.QtGui import QAction
     from qtpy.QtWidgets import QWidget
@@ -372,58 +658,98 @@ def _translate_stack(stack, QAction, QWidget) -> None:
                 stack.append(action)
 
 
+def _translate_headers(table, key: str, count: int, item_getter, enabled: bool) -> None:
+    if count <= 0:
+        return
+    current = [item_getter(i).text() if item_getter(i) is not None else ""
+               for i in range(count)]
+    originals = _source_list(table, key, current)
+    for i, original in enumerate(originals):
+        header = item_getter(i)
+        if header is None:
+            continue
+        target = tr(original) if enabled else original
+        if header.text() != target:
+            header.setText(target)
+
+
 def _translate_one(item) -> None:
+    global _TRANSLATING
     from qtpy.QtGui import QAction
     from qtpy.QtWidgets import (QAbstractButton, QComboBox, QGroupBox, QLabel, QLineEdit,
-                                QMenu, QTabWidget, QWidget)
+                                QMenu, QTabWidget, QTableWidget, QWidget)
 
-    if isinstance(item, QAction):
-        item.setText(tr(item.text()))
-        item.setToolTip(tr(item.toolTip()))
-        menu = item.menu()
-        if menu is not None:
-            menu.setTitle(tr(menu.title()))
+    previous = _TRANSLATING
+    _TRANSLATING = True
+    try:
+        enabled = language()
+        if isinstance(item, QAction):
+            _apply_text(item, "text", item.text, item.setText, enabled)
+            _apply_text(item, "tooltip", item.toolTip, item.setToolTip, enabled)
+            menu = item.menu()
+            if menu is not None:
+                _apply_text(menu, "title", menu.title, menu.setTitle, enabled)
+            return
+        if isinstance(item, QWidget):
+            if item.windowTitle():
+                _apply_text(item, "title", item.windowTitle, item.setWindowTitle, enabled)
+            if item.toolTip():
+                _apply_text(item, "tooltip", item.toolTip, item.setToolTip, enabled)
+            if isinstance(item, QLabel) and item.text():
+                _apply_text(item, "text", item.text, item.setText, enabled)
+            if isinstance(item, QAbstractButton) and item.text():
+                _apply_text(item, "text", item.text, item.setText, enabled)
+            if isinstance(item, QGroupBox) and item.title():
+                _apply_text(item, "title", item.title, item.setTitle, enabled)
+            if isinstance(item, QMenu) and item.title():
+                _apply_text(item, "title", item.title, item.setTitle, enabled)
+            if isinstance(item, QLineEdit) and item.placeholderText():
+                _apply_text(item, "placeholder", item.placeholderText,
+                            item.setPlaceholderText, enabled)
+            if isinstance(item, QTabWidget) and item.count():
+                _apply_list(item, "tabs",
+                            lambda: [item.tabText(i) for i in range(item.count())],
+                            item.tabText, item.setTabText, enabled)
+            if isinstance(item, QComboBox) and item.count():
+                _apply_list(item, "items",
+                            lambda: [item.itemText(i) for i in range(item.count())],
+                            item.itemText, item.setItemText, enabled)
+            if isinstance(item, QTableWidget):
+                _translate_headers(item, "horizontal_headers", item.columnCount(),
+                                   item.horizontalHeaderItem, enabled)
+                _translate_headers(item, "vertical_headers", item.rowCount(),
+                                   item.verticalHeaderItem, enabled)
+    finally:
+        _TRANSLATING = previous
+
+
+def retranslate_all() -> None:
+    """Re-apply the current language to every open window and dialog."""
+    from qtpy.QtWidgets import QApplication
+    global _SEEN
+    _SEEN = weakref.WeakSet()
+    app = QApplication.instance()
+    if app is None:
         return
-    if isinstance(item, QWidget):
-        title = item.windowTitle()
-        if title:
-            item.setWindowTitle(tr(title))
-        tip = item.toolTip()
-        if tip:
-            item.setToolTip(tr(tip))
-        if isinstance(item, QLabel):
-            item.setText(tr(item.text()))
-        if isinstance(item, QAbstractButton):
-            item.setText(tr(item.text()))
-        if isinstance(item, QGroupBox):
-            item.setTitle(tr(item.title()))
-        if isinstance(item, QMenu):
-            item.setTitle(tr(item.title()))
-        if isinstance(item, QLineEdit) and item.placeholderText():
-            item.setPlaceholderText(tr(item.placeholderText()))
-        if isinstance(item, QTabWidget):
-            for i in range(item.count()):
-                item.setTabText(i, tr(item.tabText(i)))
-        if isinstance(item, QComboBox):
-            for i in range(item.count()):
-                text = item.itemText(i)
-                zh = tr(text)
-                if zh != text:
-                    item.setItemText(i, zh)
+    for widget in app.topLevelWidgets():
+        try:
+            translate_tree(widget)
+        except RuntimeError:          # the widget went away while we walked
+            continue
 
 
 def install() -> None:
-    """Turn the Chinese interface on (once). Safe to call more than once."""
+    """Install the language layer (once). Safe to call more than once."""
     global _INSTALLED
-    if _INSTALLED or not language():
+    if _INSTALLED:
         return
     _INSTALLED = True
     try:
-        _qt_translations()
+        _install_qt_translations(language())
         _patch_widgets()
         _keep_filter().install()
     except Exception as exc:  # noqa: BLE001 - never keep KiPI from starting
-        print(f"KiPI: Chinese interface could not be installed: {exc}", file=sys.stderr)
+        print(f"KiPI: language interface could not be installed: {exc}", file=sys.stderr)
 
 
 def uninstall_for_tests() -> None:

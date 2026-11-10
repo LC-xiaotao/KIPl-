@@ -62,9 +62,9 @@ ODB++ 不包含元件 3D 模型，因此嘉立创EDA专业版的板卡在 3D 视
 
 ### 简体中文界面与报告
 
-KiPI 的 Qt 界面跟随系统语言：中文系统显示中文，其他系统显示英文；`KIPI_LANG=zh_CN` 强制中文，`KIPI_LANG=en` 强制英文。界面词条位于 [`kipi/gui/translations/`](kipi/gui/translations/)，`KIPI_I18N_LOG=<file>` 会记录尚未翻译的字符串。
+KiPI 默认跟随电脑语言：中文系统显示中文，其他系统显示英文。工具栏的 **Language / 语言** 菜单可选择 **跟随系统**、**简体中文** 或 **English**；切换会立即应用到当前界面并保存到 KiPI 设置，下次启动保持不变。`KIPI_LANG=zh_CN` 强制中文，`KIPI_LANG=en` 强制英文（优先级最高）。界面词条位于 [`kipi/gui/translations/`](kipi/gui/translations/)，`KIPI_I18N_LOG=<file>` 会记录尚未翻译的字符串。
 
-导出的 DC、AC、耦合噪声和容差报告（HTML 与 PDF）与界面语言一致，图表使用中文字体（微软雅黑 / PingFang SC / Noto Sans CJK）。报告词条位于 [`kipi/core/translations/`](kipi/core/translations/)。网络名、位号、层名、单位和代码保持原样。
+导出的 DC、AC、耦合噪声和容差报告（HTML 与 PDF）与界面语言一致，图表使用中文字体（微软雅黑 / PingFang SC / Noto Sans CJK）。报告词条位于 [`kipi/core/translations/`](kipi/core/translations/)。网络名、位号、层名、单位和代码保持原样。AI 助手面板的界面文字目前固定为中文。
 
 ### AI 助手
 

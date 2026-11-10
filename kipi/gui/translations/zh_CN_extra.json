@@ -456,5 +456,8 @@
  "Capacitors": "电容",
  "Nothing to draw yet: add VRMs, loads, series links or capacitor models in the setup.": "暂无可绘制内容：请在设置中添加 VRM、负载、串联元件或电容模型。",
  "Loads can be shown here once they have a tolerance (DC loads setup: Tolerance, DC tolerance or AC tolerance).": "负载具有容差后才会显示在这里（DC 负载设置：容差、DC 容差或 AC 容差）。",
- "No loads ticked yet: tick the ones to show under Loads, on the left.": "尚未勾选负载：请在左侧“负载”下勾选要显示的项。"
+ "No loads ticked yet: tick the ones to show under Loads, on the left.": "尚未勾选负载：请在左侧“负载”下勾选要显示的项。",
+ "Language": "语言",
+ "Follow system": "跟随系统",
+ "Interface and report language: follow the system, or force Chinese or English": "界面与报告语言：跟随系统，或强制中文/英文"
 }

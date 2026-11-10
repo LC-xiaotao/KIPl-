@@ -342,6 +342,29 @@ class MainWindow(QMainWindow):
                             KEYS["help"])
         self.act_about = act("About", self.show_about, "Version, author and project links")
 
+        # Interface and report language: follow the computer, or force one language.
+        self.act_language = QAction("Language", self)
+        self.act_language.setToolTip("Interface and report language: follow the system, "
+                                     "or force Chinese or English")
+        tb.addAction(self.act_language)
+        self.language_menu = QMenu(self)
+        self._language_actions = {}
+        for key, label in (("system", "Follow system"), ("zh_CN", "简体中文"),
+                           ("en", "English")):
+            language_action = QAction(label, self)
+            language_action.setCheckable(True)
+            language_action.setData(key)
+            language_action.triggered.connect(
+                lambda _checked=False, k=key: self.set_language(k))
+            self.language_menu.addAction(language_action)
+            self._language_actions[key] = language_action
+        self.act_language.setMenu(self.language_menu)
+        language_button = tb.widgetForAction(self.act_language)
+        if isinstance(language_button, QToolButton):
+            language_button.setPopupMode(QToolButton.InstantPopup)
+            language_button.setMenu(self.language_menu)
+        self._sync_language_menu()
+
         # Analysis mode, at the far right.
         spacer = QWidget(tb)
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -481,6 +504,18 @@ class MainWindow(QMainWindow):
     def show_about(self):
         from kipi.gui.about import AboutDialog
         AboutDialog(self).exec()
+
+    def set_language(self, choice: str):
+        """Apply a language chosen in the toolbar menu, to the UI and the reports."""
+        from kipi.gui import i18n
+        i18n.set_preference(choice)
+        self._sync_language_menu()
+
+    def _sync_language_menu(self):
+        from kipi.gui import i18n
+        current = i18n.preference()
+        for key, action in self._language_actions.items():
+            action.setChecked(key == current)
 
     def show_stackup(self):
         self.stackup_window.show()
