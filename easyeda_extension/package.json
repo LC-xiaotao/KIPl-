@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"private": true,
 	"type": "module",
-	"description": "EasyEDA Pro extension that exports the active PCB as ODB++ for KiPI",
+	"description": "嘉立创EDA专业版扩展：把当前 PCB 导出为 ODB++，供 KiPI 做电源完整性分析",
 	"license": "GPL-3.0-or-later",
 	"scripts": {
 		"build": "node build.mjs"

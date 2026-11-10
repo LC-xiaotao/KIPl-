@@ -2,7 +2,7 @@
 	"name": "kipi-power-integrity",
 	"uuid": "07ea49a74dd345a594091300ec78226c",
 	"displayName": "KiPI 电源完整性",
-	"description": "一键导出当前 PCB 的 ODB++，交给 KiPI 进行 DC 压降、电流密度、过孔电流、温度与 PDN 阻抗分析",
+	"description": "一键导出当前 PCB 的 ODB++，交给 KiPI 进行 DC 压降、电流密度、过孔电流、温度、AC PDN 阻抗与耦合噪声分析",
 	"version": "1.0.0",
 	"publisher": "KiPI",
 	"engines": {

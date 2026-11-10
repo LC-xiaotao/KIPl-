@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kipi"
 dynamic = ["version"]
-description = "DC power-integrity analysis for KiCad: IR drop, current density, via currents and electro-thermal co-simulation in 3D"
+description = "KiPI 电源完整性仿真：DC 压降、电流密度、过孔电流、电热耦合，以及 AC PDN 阻抗和耦合噪声分析"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"

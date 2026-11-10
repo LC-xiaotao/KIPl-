@@ -2,66 +2,46 @@
   <img src="resources/kipi.gif" alt="KiPI logo" width="128">
 </p>
 
-# KiPI — DC, AC and Coupled Noise Power Integrity Simulator (Standalone, KiCad Plugin or EasyEDA Pro)
+# KiPI — 电源完整性仿真器（独立版 / KiCad 插件 / 嘉立创EDA专业版）
 
-[![CI](https://github.com/drewsum/KiPI/actions/workflows/ci.yml/badge.svg)](https://github.com/drewsum/KiPI/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![KiCad 9.0.3+](https://img.shields.io/badge/KiCad-9.0.3%2B-314cb0.svg?logo=kicad&logoColor=white)](#requirements)
 [![Platform: Windows | Linux | macOS](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#requirements)
 [![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776ab.svg?logo=python&logoColor=white)](#requirements)
 
-**New to power integrity? Read the [Solver Guide](https://drewsum.github.io/KiPI/solver-guide.html)**
-([source](docs/solver-guide.html)): what PI analysis is, why it matters, and how KiPI's mesh
-and its DC, thermal, AC and coupled noise solvers work.
+**第一次接触电源完整性？先看 [求解器指南](https://drewsum.github.io/KiPI/solver-guide.html)（[源文件](docs/solver-guide.html)）：它介绍了什么是 PI、为什么重要，以及 KiPI 的网格、DC、热、AC 和耦合噪声求解器如何工作。**
 
-KiPI is a power integrity analyzer that runs standalone, as a KiCad 9 and 10 IPC plugin, or
-with 嘉立创EDA专业版 (EasyEDA Pro) through its ODB++ export. It has three
-analysis modes:
+KiPI 是一款电源完整性分析工具，支持三种运行方式：独立运行、作为 KiCad 9/10 的 IPC 插件，或配合 **嘉立创EDA专业版（EasyEDA Pro）** 通过 ODB++ 导出使用。包含三种分析模式：
 
-* **DC: Voltage Drop.** Define voltage regulators (VRMs), loads (current into pins) and series
-  parts (beads, resistors, load switches), then simulate the voltage drop net by net, across
-  every copper layer. Inspect voltage, current density, via currents, copper power
-  dissipation and (optionally) board temperature in a rotatable 3D view, with PASS/FAIL
-  checks for loads, VRMs, vias and temperature, and write an interactive HTML report or a
-  PDF.
-* **AC: PDN Impedance.** Give the decoupling capacitors RLC models and put probes on a
-  device's power pins, then sweep the impedance of the power distribution network (planes,
-  vias, mounting and capacitors) over frequency. Check it against a flat or custom target
-  impedance, with a calculator that determines the target from the load's transient spec.
-* **Coupled Noise: Switcher Noise on Signal Nets.** Treat a buck or boost regulator as an
-  aggressor: KiPI builds its switch node, inductor and capacitor ripple waveforms from the
-  layout, then works out the noise they couple onto the signal nets you name (the victims)
-  through capacitance, mutual inductance and shared ground. Each victim's receiver is
-  checked against its logic family's noise margin, with the line held high and held low, and
-  the 3D view shows where along its traces the noise couples in.
+* **DC：压降与电流密度。** 定义 VRM、负载（引脚电流）和串联器件（磁珠、电阻、负载开关），逐网络、逐铜层计算压降；在可旋转的 3D 视图中查看电压、电流密度、过孔电流、铜损和（可选的）板温，并对负载、VRM、过孔和温度做 PASS/FAIL 判定，导出交互式 HTML 或 PDF 报告。
+* **AC：PDN 阻抗。** 为去耦电容建立 RLC 模型，在器件电源引脚放置探针，在频域扫描电源分配网络（平面、过孔、安装孔和电容）的阻抗；对照平坦或自定义目标阻抗检查，并可根据负载瞬态指标计算目标阻抗。
+* **耦合噪声：开关电源对信号网络的串扰。** 把 buck/boost 电源当作干扰源，KiPI 根据布局构建开关节点、电感和电容的纹波波形，计算它们通过电容、互感与共地耦合到指定受害网络上的噪声；按逻辑电平的噪声容限检查接收端（高电平和低电平两种状态），并在 3D 视图中显示噪声耦合位置。
 
-New to KiPI? The **[user guide](docs/help.html)** (also the **Help** button in KiPI, or
-**F1**) walks through every button, the workflows and what the results mean. Every
-control in KiPI has a tooltip. This README is an overview; the user guide has the details.
+第一次使用？**[用户指南](docs/help.html)**（KiPI 内的 **Help** 按钮或 **F1**）逐步介绍每个按钮、工作流和结果含义。KiPI 中每个控件都有工具提示。
 
 ![Current density with flow arrows through the +12V input path and the U201 eFuse, with the Series links table](docs/images/current_density.png)
 
-**Status: 1.0.0 (stable)** ([changelog](docs/CHANGELOG.md)). KiPI runs on its own too, with an app launcher that handles dependencies, and imports boards from other layout tools. The author wants to add support for more PCB file formats. If you have an example with good complexity which uses a wide variety of your PCB design tool's features that you are willing to share, please open an [issue](https://github.com/drewsum/KiPI/issues) and attach your PCB file there.
+**状态：1.0.0（稳定版）**（[更新日志](docs/CHANGELOG.md)）。本仓库是面向 **嘉立创EDA专业版** 的定制版本，保留上游 KiPI 的 GPL-3.0 许可证与提交历史。仓库地址：[gitee.com/liu-xiaotao/kiplpdndianyuan](https://gitee.com/liu-xiaotao/kiplpdndianyuan)。
 
-## Install
+## 最新特性
 
-KiPI runs from the same folder in three ways:
+* **嘉立创EDA专业版集成**：扩展一键把当前 PCB 导出为 ODB++，KiPI 直接打开；修复了 EasyEDA ODB++ 的单位与铜厚读取，0.48 mm 介质 + 35 µm 铜可得到正确的 1.58 mm 四层叠层。
+* **简体中文界面与中文报告**：菜单、工具栏、设置面板、3D 控件、叠层图、容差图和 Qt 标准按钮均已汉化；DC、AC、耦合噪声和容差报告（HTML 与 PDF）跟随界面语言，图表使用中文字体。
+* **AI 助手**：支持多家模型供应商，可用自然语言读取板卡、修改仿真设置、运行 DC/AC/耦合噪声求解并导出报告；支持模型列表拉取、思考过程折叠、Markdown 渲染、附件上传和按工程保存的对话。
+* **窄窗口适配**：右侧设置面板最小宽度从 420 px 降到 300 px，表单自动换行、表格横向滚动，窗口变窄时优先压缩面板而不是挤掉 3D 视图。
+* **3D 视图修复**：解决 Qt 6 下中文界面事件过滤器导致 3D 标签页黑屏的问题。
 
-* **As a KiCad plugin**, the main way: click the **KiPI** button in the PCB editor and KiPI
-  reads the board open there. For this, the KiPI folder **must be in KiCad's plugins
-  folder**, and KiCad installs its dependencies.
-* **Standalone**: KiPI started on its own, with its launcher, opens board files and needs
-  no KiCad. The folder can be **anywhere**; the launcher installs the dependencies on the
-  first start. It opens KiCad 7 to 10 board files (`.kicad_pcb`), ODB++ jobs, HyperLynx
-  files (`.hyp`) and KiPI snapshots (`.kipi.json.gz`). Reading CCE files is on the way
-  ([#143](https://github.com/drewsum/KiPI/issues/143)).
-* **With 嘉立创EDA专业版 (EasyEDA Pro)**: a small extension exports the open PCB as
-  ODB++, which KiPI then opens. EasyEDA Pro extensions run in a JavaScript sandbox and
-  cannot start a desktop program, so the export is the hand-off between the two.
+## 安装与运行
 
-### With 嘉立创EDA专业版 (EasyEDA Pro)
+KiPI 可以用三种方式运行：
 
-1. Build the extension once; it needs Node.js 20+:
+* **作为 KiCad 插件（主要方式）**：在 PCB 编辑器点击 **KiPI** 按钮，KiPI 读取当前打开的板卡。KiPI 文件夹必须位于 KiCad 的插件目录中；首次点击会自动安装依赖。
+* **独立运行**：用自带的启动器启动，不依赖 KiCad。文件夹可以放在任意位置，启动器首次运行时安装依赖。支持 KiCad 7–10 板卡（`.kicad_pcb`）、ODB++、HyperLynx（`.hyp`）和 KiPI 快照（`.kipi.json.gz`）。
+* **配合嘉立创EDA专业版**：安装扩展后一键导出 ODB++，再用 KiPI 独立版打开。
+
+### 嘉立创EDA专业版
+
+1. 构建扩展（需要 Node.js 20+）：
 
    ```powershell
    cd easyeda_extension
@@ -69,75 +49,51 @@ KiPI runs from the same folder in three ways:
    npm run build
    ```
 
-   This writes `easyeda_extension/build/kipi-power-integrity_v1.0.0.eext`.
+   产物为 `easyeda_extension/build/kipi-power-integrity_v1.0.0.eext`。
 
-2. In EasyEDA Pro, import it: **高级 → 扩展管理器… → 导入** (older clients:
-   **设置 → 扩展 → 扩展管理器… → 导入扩展**).
+2. 在嘉立创EDA专业版中导入：**高级 → 扩展管理器… → 导入**（旧版客户端：**设置 → 扩展 → 扩展管理器… → 导入扩展**）。
 
-3. Open a PCB and use **KiPI → 导出 ODB++ 到 KiPI…**. Save the `.tgz` file where you
-   like; it carries the copper, nets, pads, vias, board outline and stackup.
+3. 打开 PCB，使用 **KiPI → 导出 ODB++ 到 KiPI…**，保存 `.tgz` 文件。文件包含铜皮、网络、焊盘、过孔、板框和叠层。
 
-4. Start KiPI standalone (`python kipi_launcher.pyw`, or the installed `kipi` command)
-   and open the saved `.tgz` with **Open**. KiPI labels it *EasyEDA Pro (ODB++)*.
+4. 启动 KiPI 独立版（`python kipi_launcher.pyw`，或安装后的 `kipi` 命令），点击 **打开** 选择刚才的 `.tgz`。KiPI 会标记为 *EasyEDA Pro (ODB++)*。
 
-ODB++ has no part models, so EasyEDA Pro boards show copper, vias, pads and the outline
-in the 3D view, without component bodies. The extension source and notes live in
-[`easyeda_extension/`](easyeda_extension/README.md).
+ODB++ 不包含元件 3D 模型，因此嘉立创EDA专业版的板卡在 3D 视图中显示铜皮、过孔、焊盘和板框，不显示元件本体。扩展源码和说明见 [`easyeda_extension/`](easyeda_extension/README.md)。
 
-### Chinese interface (简体中文)
+### 简体中文界面与报告
 
-KiPI's Qt interface follows the system language: it is Chinese when Windows, macOS or
-Linux is set to Chinese, and English otherwise. `KIPI_LANG=zh_CN` forces Chinese and
-`KIPI_LANG=en` forces English, whatever the system says. The catalog lives in
-[`kipi/gui/translations/`](kipi/gui/translations/) as English-to-Chinese JSON files;
-`KIPI_I18N_LOG=<file>` writes every on-screen string the catalog does not cover, which is
-how the catalog is extended. The exported reports (HTML and PDF) follow the same language,
-with their figures in a Chinese font; their catalog is
-[`kipi/core/translations/report_zh_CN.json`](kipi/core/translations/report_zh_CN.json).
-The EasyEDA Pro extension is Chinese by default.
+KiPI 的 Qt 界面跟随系统语言：中文系统显示中文，其他系统显示英文；`KIPI_LANG=zh_CN` 强制中文，`KIPI_LANG=en` 强制英文。界面词条位于 [`kipi/gui/translations/`](kipi/gui/translations/)，`KIPI_I18N_LOG=<file>` 会记录尚未翻译的字符串。
 
-### AI assistant (AI 助手)
+导出的 DC、AC、耦合噪声和容差报告（HTML 与 PDF）与界面语言一致，图表使用中文字体（微软雅黑 / PingFang SC / Noto Sans CJK）。报告词条位于 [`kipi/core/translations/`](kipi/core/translations/)。网络名、位号、层名、单位和代码保持原样。
 
-KiPI has a chat assistant that operates the plugin in natural language: it can read the
-open board, list nets and parts, add VRMs and loads, run the DC and Coupled Noise solves,
-run an AC impedance sweep, and export reports. Open it from **AI 助手** in the toolbar (a
-tab beside the setup panel), click **设置…**, choose a provider and enter the endpoint and
-API key. A **配置名称** names the configuration (it is shown in the panel; empty means the
-provider's name). The custom provider can speak either the OpenAI-compatible
-`chat/completions` API or **Anthropic Messages (原生)**. The interface address may be the
-API root (`https://api.example.com/v1`) or a full chat/messages endpoint; KiPI trims it to
-the root. Once the endpoint and key are filled the dialog fetches the provider's model
-list automatically (the **拉取模型** button refreshes it) and offers the models in a
-dropdown; a model name can still be typed by hand. Picking a model fills
-**最大输出 token** from the list's metadata when the provider publishes it, else from a
-known family or provider default, and the value stays editable.
+### AI 助手
 
-Providers: OpenAI, Anthropic, DeepSeek, 通义千问 (Qwen), 智谱 GLM, Kimi, Gemini, Ollama
-and a custom endpoint (vLLM, LM Studio, a gateway) speaking either the
-OpenAI-compatible chat-completions API or Anthropic Messages (原生). The presets use
-chat-completions except Anthropic, which uses its native messages API.
-The API key is kept in KiPI's local settings (plain text): use a restricted key, or a
-local model on a shared machine. `KIPI_LANG` does not affect the assistant, which answers
-in Chinese.
+KiPI 内置 AI 助手，可以用自然语言操作插件：读取当前板卡、列出网络和元件、添加 VRM/负载、运行 DC/AC/耦合噪声求解、读取结果并导出报告。从工具栏 **AI 助手** 打开（与设置面板同区域），点击 **设置…** 配置。
 
-The assistant only acts through tools, so every number it reports comes from a solve it
-ran; it is told to name the networks, parts and pins it uses and to mark assumptions
-(currents, switching frequency, inductance) as such. When the model returns its reasoning
-(DeepSeek `reasoning_content`, OpenRouter `reasoning_details`, Anthropic `thinking`), the
-reply shows it as a collapsed **▶ 思考过程（N 字）** section above the answer; click it to
-expand, click again to fold. Reasoning is not sent back in the next request. A tool run
-allows 30 model rounds by default (set **最多工具轮次** in **设置…**); reaching the limit
-pauses with a **继续** button that resumes from the last tool result instead of ending the
-task. Replies are rendered as Markdown: headings, **bold**, *italic*, lists, tables,
-quotes, code blocks and links show as formatting rather than literal syntax; links open
-in the browser when clicked. Tool output and reasoning stay plain text.
+**模型供应商**
 
-Each board has its own conversation: switching boards saves the current chat and loads
-the new board's own (kept under KiPI's data folder), so reopening a project brings its
-history back. **附件…** adds PDF, Word (`.docx`), Excel/CSV (`.xlsx`, `.csv`, `.tsv`),
-text, Markdown, JSON or HTML to the next message. The text is extracted locally — 30,000
-characters per file, 60,000 per message, with a truncation note — and sent with the
-message; the file itself is never uploaded.
+- 内置供应商：OpenAI、Anthropic、DeepSeek、通义千问、智谱 GLM、Kimi、Gemini、Ollama、自定义。
+- 自定义接口支持 **OpenAI 兼容（chat/completions）** 或 **Anthropic Messages（原生）**。
+- 支持填写 **配置名称**、接口地址、模型和 API Key；接口地址可填根地址（如 `https://api.example.com/v1`），也可粘贴完整端点，KiPI 会自动修正。
+- 填好地址和 Key 后自动拉取模型列表（也可点 **拉取模型** 手动刷新）；选择模型后自动填入已知的最大输出 token，仍可手动修改。
+- API Key 只保存在本机 KiPI 设置中（明文），建议使用受限 Key，或在共享机器上使用本地模型。
+
+**对话与显示**
+
+- 回复按 Markdown 渲染：标题、粗体、斜体、列表、表格、引用、代码块和链接；点击链接用系统浏览器打开。
+- 模型返回思考内容时，以折叠的 **▶ 思考过程（N 字）** 显示，点击展开、再点收起；思考内容不会回传给模型。
+- **每个工程/板卡有独立对话**：切换板卡自动保存当前对话并加载目标工程的对话，重新打开工程可恢复历史；对话保存在 KiPI 数据目录（`KIPI_HOME`，Windows 默认 `%LOCALAPPDATA%\KiPI`）。
+- 默认最多 **30 轮**工具调用（设置中可调 1–200）；达到上限会暂停并显示 **继续**，保留完整上下文，不会直接终止任务。
+- 支持 **附件…** 上传 PDF、Word（`.docx`）、Excel/CSV/TSV、文本、Markdown、JSON、HTML、YAML、XML；本地提取文字后随消息发送，文件本身不会上传。每个文件约 3 万字符、单条消息约 6 万字符，超出会截断并提示；扫描版 PDF 需要先 OCR。
+- 工具调用记录、JSON 结果和思考内容保持纯文本，避免被 Markdown 改写。
+
+**能力范围**
+
+助手通过工具操作插件，而不是凭空回答：读取板卡、网络、元件和已有设置；添加/删除 VRM、负载、AC 探针、噪声干扰源和受害网络；运行 `solve_dc`、`solve_ac`、`solve_noise`；返回负载压降、VRM、网络组、探针阻抗、受害网络噪声与裕量；导出 DC/AC/噪声报告（HTML 或 PDF）。系统提示要求助手先核对网络/位号、明确标注假设，并且只报告工具返回的数据。
+
+## 详细安装与使用（English）
+
+> 以下保留上游英文说明，包含 KiCad 插件要求、PCM/手动安装、独立运行、详细使用步骤、开发和许可证信息。
+
 
 ### As a KiCad plugin
 
