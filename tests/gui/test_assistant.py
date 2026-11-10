@@ -516,6 +516,28 @@ def test_dock_shows_the_custom_config_name():
     assert "公司网关" in dock.lbl_provider.text()
 
 
+def test_thermal_settings_can_be_set_from_the_assistant():
+    main = _Main()
+    runner = ToolRunner(main)
+    assert "set_thermal" in {tool["function"]["name"] for tool in TOOLS}
+
+    out = json.loads(runner.run("set_thermal", {
+        "enabled": True, "ambient_c": 40, "iterations": 5, "airflow_m_s": 1.5,
+        "load_power": True, "max_temp_c": 85, "max_rise_c": 45}))
+    thermal = out["thermal"]
+    assert thermal["enabled"] and thermal["ambient_c"] == 40
+    assert thermal["iterations"] == 5 and thermal["airflow_m_s"] == 1.5
+    assert thermal["max_temp_c"] == 85 and thermal["max_rise_c"] == 45
+    setup = main.solve_panel.setup
+    assert setup.thermal.enabled and setup.thermal.load_power
+
+    assert json.loads(runner.run("get_context", {}))["setup"]["thermal"] is True
+    assert json.loads(runner.run("get_setup", {}))["thermal"]["ambient_c"] == 40
+
+    runner.run("set_thermal", {"clear_limits": True})
+    assert setup.thermal.max_temp_c is None and setup.thermal.max_rise_c is None
+
+
 def test_fast_setup_is_coarser_without_touching_the_setup():
     from kipi.gui.assistant.tools import _fast_setup
 

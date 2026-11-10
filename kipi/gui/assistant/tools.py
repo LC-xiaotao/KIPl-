@@ -104,6 +104,21 @@ FAST_NOTE = ("快速模式：网格、扫频点或谐波已简化，结果适合
              "需要精确结果请关闭“快速”后重新求解。")
 
 
+def _thermal_dict(thermal) -> dict:
+    return {
+        "enabled": bool(thermal.enabled),
+        "ambient_c": thermal.ambient_c,
+        "iterations": thermal.iterations,
+        "airflow_m_s": thermal.airflow_m_s,
+        "grid_mm": thermal.grid_mm,
+        "load_power": bool(thermal.load_power),
+        "max_temp_c": thermal.max_temp_c,
+        "max_rise_c": thermal.max_rise_c,
+        "edges": [{"name": e.name, "temp_c": e.temp_c, "width_mm": e.width_mm,
+                   "points": len(e.points)} for e in thermal.edges],
+    }
+
+
 def _fast_setup(setup):
     """A copy with coarser meshes, fewer sweep points and harmonics, no board model.
 
@@ -158,7 +173,18 @@ TOOLS: List[dict] = [
           {"net": {"type": "string", "description": "只列出在此网络上有焊盘的元件"},
            "filter": {"type": "string", "description": "只显示位号/参数/封装包含此文本的元件"},
            "limit": {"type": "integer", "description": "最多返回多少个，默认 120"}}),
-    _tool("get_setup", "查看当前仿真的设置：VRM、负载、串联元件、干扰源、受害网络、探针。", {}),
+    _tool("get_setup", "查看当前仿真的设置：VRM、负载、串联元件、干扰源、受害网络、探针和热分析。", {}),
+    _tool("set_thermal", "配置 DC 电热耦合分析（PI 设置的 Thermal 页）：开启/关闭、环境温度、"
+                         "气流、迭代次数、负载发热和温度限值。边缘恒温边界请在界面中配置。",
+          {"enabled": {"type": "boolean", "description": "是否开启电热耦合分析"},
+           "ambient_c": {"type": "number", "description": "环境温度 °C，默认 25"},
+           "iterations": {"type": "integer", "description": "热迭代次数 1-10"},
+           "airflow_m_s": {"type": "number", "description": "气流速度 m/s，0 为自然对流"},
+           "grid_mm": {"type": "number", "description": "热网格尺寸 mm，0 为自动"},
+           "load_power": {"type": "boolean", "description": "是否把负载功耗也作为热源"},
+           "max_temp_c": {"type": "number", "description": "铜温上限 °C，可选"},
+           "max_rise_c": {"type": "number", "description": "相对环境温升上限 °C，可选"},
+           "clear_limits": {"type": "boolean", "description": "清除铜温/温升限值"}}),
     _tool("set_nets", "勾选要参与仿真的网络（板卡面板中的网络列表）。",
           {"nets": {"type": "array", "items": {"type": "string"},
                     "description": "要勾选的网络名列表"}}, ["nets"]),
@@ -177,7 +203,8 @@ TOOLS: List[dict] = [
           ["name", "current_a", "supply_net", "supply_part"]),
     _tool("remove_item", "删除设置中的一项。kind: vrm/load/link/probe/aggressor/victim/cap。",
           {"kind": {"type": "string"}, "name": {"type": "string"}}, ["kind", "name"]),
-    _tool("solve_dc", "运行 DC 压降/电流密度求解，并返回负载、VRM 和网络组结果。", {}),
+    _tool("solve_dc", "运行 DC 压降/电流密度求解，并返回负载、VRM 和网络组结果；"
+                      "如果设置中开启了热分析，会同时做电热耦合迭代并返回温度。", {}),
     _tool("get_dc_results", "读取最近一次 DC 求解结果，不重新求解。", {}),
     _tool("add_noise_aggressor", "添加耦合噪声的干扰源（开关电源）。需要设置中已有同名 smps 类型的 VRM。",
           {"name": {"type": "string", "description": "干扰源名称"},
@@ -284,7 +311,8 @@ class ToolRunner:
             "selected_nets": list(setup.nets or []),
             "setup": {"vrms": len(setup.vrms), "loads": len(setup.loads),
                       "links": len(setup.links), "probes": len(setup.probes),
-                      "aggressors": len(setup.aggressors), "victims": len(setup.victims)},
+                      "aggressors": len(setup.aggressors), "victims": len(setup.victims),
+                      "thermal": bool(setup.thermal.enabled)},
             "has_dc_result": self.main._tree is not None,
             "has_noise_result": getattr(self.main.noise_panel, "result", None) is not None,
             "has_ac_result": getattr(self.main.ac_panel, "result", None) is not None,
@@ -360,7 +388,35 @@ class ToolRunner:
                         for v in setup.victims],
             "probes": [{"name": p.name, "rail": _pin_dict(p.rail),
                         "ground": _pin_dict(p.ground)} for p in setup.probes],
+            "thermal": _thermal_dict(setup.thermal),
         }
+
+    def tool_set_thermal(self, args) -> dict:
+        main = self.main
+        if main.snapshot is None:
+            raise ValueError("还没有加载板卡。")
+        thermal = _setup(main).thermal
+        if args.get("enabled") is not None:
+            thermal.enabled = bool(args["enabled"])
+        if args.get("ambient_c") is not None:
+            thermal.ambient_c = max(-55.0, min(200.0, float(args["ambient_c"])))
+        if args.get("iterations") is not None:
+            thermal.iterations = max(1, min(10, int(args["iterations"])))
+        if args.get("airflow_m_s") is not None:
+            thermal.airflow_m_s = max(0.0, float(args["airflow_m_s"]))
+        if args.get("grid_mm") is not None:
+            thermal.grid_mm = max(0.0, float(args["grid_mm"]))
+        if args.get("load_power") is not None:
+            thermal.load_power = bool(args["load_power"])
+        if args.get("clear_limits"):
+            thermal.max_temp_c = None
+            thermal.max_rise_c = None
+        if args.get("max_temp_c") is not None:
+            thermal.max_temp_c = float(args["max_temp_c"])
+        if args.get("max_rise_c") is not None:
+            thermal.max_rise_c = float(args["max_rise_c"])
+        _refresh(main)
+        return {"thermal": _thermal_dict(thermal)}
 
     def tool_set_nets(self, args) -> dict:
         snap = self.main.snapshot
@@ -502,8 +558,28 @@ class ToolRunner:
                            "peak_current_density_a_mm2": _round(s.get("j_max", 0), 3),
                            "copper_loss_mw": _round(s.get("power_loss", 0) * 1e3, 4),
                            "max_via_current_a": _round(s.get("via_current_max", 0), 4)})
+        thermal = None
+        th = getattr(tree, "thermal", None)
+        if th is not None and self.main.snapshot is not None:
+            from kipi.dc.pi.report import layer_temps, limits_text, thermal_passed
+            rows = layer_temps(tree, self.main.snapshot, th.settings)
+            thermal = {
+                "ambient_c": th.settings.ambient_c,
+                "airflow_m_s": th.settings.airflow_m_s,
+                "max_temp_c": th.settings.max_temp_c,
+                "max_rise_c": th.settings.max_rise_c,
+                "limits": limits_text(th.settings),
+                "passed": thermal_passed(rows),
+                "heat_w": _round(th.heat_w, 6),
+                "heat_by_kind": {k: _round(v, 6) for k, v in th.heat_by_kind.items()},
+                "iterations": len(th.history),
+                "layers": [{"layer": r.layer, "peak_c": _round(r.t_max, 4),
+                            "rise_c": _round(r.rise, 4), "x_mm": _round(r.x, 4),
+                            "y_mm": _round(r.y, 4), "group": r.group,
+                            "passed": r.passed} for r in rows],
+            }
         return {"loads": loads, "vrms": vrms, "groups": groups,
-                "warnings": list(tree.warnings or [])}
+                "thermal": thermal, "warnings": list(tree.warnings or [])}
 
     def tool_add_noise_aggressor(self, args) -> dict:
         from kipi.noise.checks import seed_phases
