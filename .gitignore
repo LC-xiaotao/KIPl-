@@ -11,3 +11,4 @@ dist/
 uv.lock
 .vscode/
 KiPI.lnk
+/KiPI.exe

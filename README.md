@@ -138,7 +138,14 @@ KiPI 内置 AI 助手，可以用自然语言操作插件：读取当前板卡�
    python kipi_launcher.py <board>.kipi.json.gz
    ```
 
-   Windows 上也可以双击 **`kipi_launcher.pyw`**。首次启动会显示依赖安装窗口，点击 **Install** 后开始安装；完成后启动 KiPI。
+   Windows 上也可以双击 **`kipi_launcher.pyw`**，或直接双击项目根目录的 **`KiPI.exe`**（与 `kipi_launcher.pyw` 同目录），无需打开终端。首次启动会显示依赖安装窗口，点击 **Install** 后开始安装；完成后启动 KiPI。
+
+   `KiPI.exe` 是一个轻量启动器，不包含 KiPI 本体：它使用已安装的 KiPI 环境启动，首次运行仍会创建环境。重新打包：
+
+   ```powershell
+   python -m pip install pyinstaller
+   python tools/build_windows_exe.py
+   ```
 
 4. 依赖环境位于 KiPI 文件夹之外，`KIPI_HOME` 可以改到别处：
 
@@ -271,6 +278,7 @@ $env:KIPI_HOST = "plugin"; .venv\Scripts\python -m kipi        # 作为插件连
 | `kipi_entry.py`、`plugin.json` | KiCad IPC 插件入口（以插件方式运行 KiPI） |
 | `kipi/__main__.py` | `python -m kipi` / `kipi`：独立运行，或设置 `KIPI_HOST=plugin` 作为插件运行 |
 | `kipi_launcher.py`、`.pyw` | 独立版启动器：首次启动配置环境，然后在其中启动 KiPI |
+| `tools/build_windows_exe.py`、`tools/kipi_shortcut.py` | 打包/实现 Windows 快捷启动 `KiPI.exe` |
 | `kipi/launcher/` | 启动器实现：环境、Python 发现、包列表、安装器和设置界面 |
 | `kipi/host.py` | 判断 KiPI 是以插件还是独立版启动 |
 | `kipi/core/` | 各分析共享：板卡模型、铜皮几何、网格、稀疏求解器、3D 网格和进度报告 |

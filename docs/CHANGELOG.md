@@ -11,6 +11,7 @@ milestones rather than versions that were ever set.
 ### 新增
 
 - **嘉立创EDA专业版集成**：新增 `easyeda_extension` 扩展，一键把当前 PCB 导出为 ODB++，供 KiPI 独立版打开；KiPI 会把这类板卡标记为 *EasyEDA Pro (ODB++)*。
+- **Windows 快捷启动 exe**：新增 `tools/kipi_shortcut.py` 和 `tools/build_windows_exe.py`，用 PyInstaller 打包轻量的 `KiPI.exe`；双击即可启动，支持把板卡文件拖到 exe 上打开，并复用现有的 KiPI 环境。
 - **语言切换**：工具栏新增 **Language / 语言** 菜单，默认跟随电脑语言，也可切换为简体中文或 English；切换立即应用到界面和报告，并保存到 KiPI 设置，下次启动保持不变。`KIPI_LANG` 仍可强制语言。
 - **简体中文界面**：Qt 菜单、工具栏、设置面板、对话框、3D 控件、叠层/容差图和标准按钮均已支持中文；`KIPI_LANG` 可强制中文或英文，`KIPI_I18N_LOG` 可导出未翻译的界面字符串。
 - **中文报告**：DC、AC、耦合噪声和容差报告（HTML 与 PDF）跟随界面语言，图表使用中文字体，网络名、位号、层名和单位保持原样。
