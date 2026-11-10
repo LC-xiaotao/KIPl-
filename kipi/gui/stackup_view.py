@@ -157,7 +157,8 @@ class StackupView(QWidget):
         self._rects = self._layout()
         if not self._bands:
             p.setPen(pal.text().color())
-            p.drawText(self.rect(), Qt.AlignCenter, "No stackup")
+            from kipi.gui import i18n
+            p.drawText(self.rect(), Qt.AlignCenter, i18n.tr("No stackup"))
             p.end()
             return
         edge = pal.window().color().darker(160)
@@ -187,9 +188,10 @@ class StackupView(QWidget):
             p.drawPolyline([QPointF(x_bar + 2, y0), QPointF(x_bar + LEADER_W / 2, y0),
                             QPointF(x_text - 3, y)])
             p.setPen(pal.highlight().color() if i == self._hover else text)
+            from kipi.gui import i18n
             p.drawText(QRectF(x_text, y - fm.height() / 2, self.width() - x_text - MARGIN,
                               fm.height()), Qt.AlignLeft | Qt.AlignVCenter,
-                       fm.elidedText(self._bands[i].label, Qt.ElideRight,
+                       fm.elidedText(i18n.tr(self._bands[i].label), Qt.ElideRight,
                                      int(self.width() - x_text - MARGIN)))
         p.end()
 

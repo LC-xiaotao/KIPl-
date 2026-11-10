@@ -1,0 +1,8 @@
+{
+	"export.needPcb": "Open a PCB document first, then export to KiPI.",
+	"export.running": "Generating ODB++…",
+	"export.noFile": "EasyEDA Pro did not return an ODB++ file.",
+	"export.done": "ODB++ exported.\n\nNext:\n1. Start KiPI (kipi_launcher.pyw or the kipi command).\n2. Click \"Open\" in KiPI and choose the .tgz file you just saved, or drag the .tgz onto kipi_launcher.pyw.\n\nKiPI reads nets, copper layers, vias, pads and the board outline, then runs DC drop, current density, via current, thermal and PDN impedance analyses.",
+	"export.failed": "ODB++ export failed. Check that the active document is a PCB and that the extension has file-export permission.",
+	"help.body": "KiPI is a standalone power-integrity analyzer for DC voltage drop, current density, via currents, copper temperature and PDN impedance.\n\nIn the PCB editor, open the KiPI menu → \"Export ODB++ to KiPI…\" and choose where to save. Then start KiPI and open the generated .tgz file.\n\nProject home: https://github.com/drewsum/KiPI"
+}

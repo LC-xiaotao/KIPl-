@@ -39,6 +39,7 @@ from kipi.core.model.stackup import (
 )
 from kipi.core.viz.layer_colors import coating_rgb
 from kipi.dc.thermal.materials import catalog, coating_k, lookup
+from kipi.gui import i18n
 from kipi.gui.stackup_view import Band, StackupView
 from kipi.gui.tooltip_art import art_tip
 from kipi.gui.unit_spin import UnitSpinBox
@@ -311,7 +312,7 @@ class StackupWindow(QDialog):
             else:
                 between = (f"Between {names.get(e.above_layer, 'the top')} and "
                            f"{names.get(e.below_layer, 'the bottom')}")
-                item = QTableWidgetItem("   Dielectric")
+                item = QTableWidgetItem(i18n.tr("   Dielectric"))
                 item.setToolTip(between)
                 self.table.setItem(i, C_NAME, item)
                 box = self._material_box(d, kicad_mats[d] if d < len(kicad_mats) else "")
@@ -360,7 +361,7 @@ class StackupWindow(QDialog):
 
     def _fill_coating(self, i: int, c: Coating):
         """A solder mask's or silkscreen's row: its thickness, editable while unlocked."""
-        item = QTableWidgetItem(c.name)
+        item = QTableWidgetItem(i18n.tr(c.name))
         pm = QPixmap(12, 12)
         pm.fill(QColor.fromRgbF(*coating_rgb(c)))
         item.setIcon(QIcon(pm))
@@ -371,8 +372,8 @@ class StackupWindow(QDialog):
                + "; it does not add to the board's thickness.")
         item.setToolTip(art_tip(tip, "coatings", c.kind))
         self.table.setItem(i, C_NAME, item)
-        mat = QTableWidgetItem(c.material or ("Solder mask" if c.kind == MASK
-                                              else "Silkscreen ink"))
+        mat = QTableWidgetItem(i18n.tr(c.material or ("Solder mask" if c.kind == MASK
+                                                      else "Silkscreen ink")))
         mat.setToolTip(tip)
         self.table.setItem(i, C_MAT, mat)
         thk = UnitSpinBox(self.table)

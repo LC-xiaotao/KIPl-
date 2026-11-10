@@ -1,7 +1,20 @@
 # Portions Copyright (c) 2026 Tomachie LLC.
 """Shared test fixtures."""
 
+import os
+
 import pytest
+
+# The GUI tests assert the English literals the code passes to Qt. Keep the translation
+# layer off for them whatever this machine's language is; tests/gui/test_i18n.py turns it
+# on by itself.
+os.environ["KIPI_LANG"] = "en"
+
+
+@pytest.fixture(autouse=True)
+def isolated_kipi_home(monkeypatch, tmp_path_factory):
+    """Tests never read or write this machine's assistant conversations or data folder."""
+    monkeypatch.setenv("KIPI_HOME", str(tmp_path_factory.getbasetemp() / "kipi-home"))
 
 
 @pytest.fixture(autouse=True)

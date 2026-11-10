@@ -1,0 +1,8 @@
+{
+	"export.needPcb": "请先打开一个 PCB 文档，再使用 KiPI 导出。",
+	"export.running": "正在生成 ODB++…",
+	"export.noFile": "嘉立创EDA没有返回 ODB++ 文件。",
+	"export.done": "ODB++ 已导出。\n\n接下来：\n1. 启动 KiPI（kipi_launcher.pyw 或 kipi 命令）。\n2. 在 KiPI 中点击“打开”，选择刚保存的 .tgz 文件；也可以把 .tgz 直接拖到 kipi_launcher.pyw 上。\n\nKiPI 会读取网络、铜层、过孔、焊盘和板框，进行 DC 压降、电流密度、过孔电流、温度与 PDN 阻抗分析。",
+	"export.failed": "ODB++ 导出失败。请确认当前文档是 PCB，并检查扩展是否具有文件导出权限。",
+	"help.body": "KiPI 是独立的电源完整性分析工具，用于 DC 压降、电流密度、过孔电流、铜温与 PDN 阻抗分析。\n\n在 PCB 编辑器中打开菜单 KiPI → “导出 ODB++ 到 KiPI…”，选择保存位置。然后启动 KiPI 并打开生成的 .tgz 文件。\n\nKiPI 项目主页：https://github.com/drewsum/KiPI"
+}

@@ -85,7 +85,8 @@ def main(argv=None) -> int:
 
 # The modules of requirements-standalone.txt, by the name they are imported under.
 _MODULES = ("qtpy", "PySide6", "pyvista", "pyvistaqt", "numpy", "shapely", "scipy",
-            "triangle", "pyamg", "plotly", "matplotlib", "yaml")
+            "triangle", "pyamg", "plotly", "matplotlib", "yaml", "pypdf", "docx",
+            "openpyxl")
 
 
 def missing_packages():

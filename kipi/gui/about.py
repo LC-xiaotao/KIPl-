@@ -96,6 +96,11 @@ class RepoStats:
     downloads: int       # release zip downloads, all releases
 
     def text(self) -> str:
+        from kipi.gui import i18n
+        if i18n.language():
+            return (f"自 {self.since} 起 {self.clones:,} 次克隆"
+                    f"（最近 14 天 {self.uniques_14d:,} 个独立用户） · "
+                    f"{self.downloads:,} 次发布下载")
         return (f"{self.clones:,} clones since {self.since} ({self.uniques_14d:,} unique in the "
                 f"last 14 days) · {self.downloads:,} release downloads")
 
@@ -151,14 +156,24 @@ def fetch_latest_release(url: str = RELEASES_URL,
 
 def update_text(latest: Optional[Tuple[str, str]], current: str = __version__) -> str:
     """What the About dialog says once it has checked for updates (rich text)."""
+    from kipi.gui import i18n
     if latest is None:
+        if i18n.language():
+            return ("无法连接 GitHub 检查更新；请查看 "
+                    f"<a href='{REPO}/releases'>发布页</a>。")
         return ("Could not reach GitHub to check for updates; see "
                 f"<a href='{REPO}/releases'>the releases</a>.")
     tag, url = latest
     new, have = version_tuple(tag), version_tuple(current)
     if new is not None and have is not None and new > have:
+        if i18n.language():
+            return (f"KiPI {html.escape(tag)} 已发布："
+                    f"<a href='{html.escape(url)}'>下载</a>。")
         return (f"KiPI {html.escape(tag)} is available: "
                 f"<a href='{html.escape(url)}'>download it</a>.")
+    if i18n.language():
+        return (f"KiPI {html.escape(current)} 已是最新版本"
+                f"（最新发布为 {html.escape(tag)}）。")
     return f"KiPI {html.escape(current)} is up to date (the latest release is {html.escape(tag)})."
 
 
@@ -233,7 +248,8 @@ def info_text() -> str:
 class AboutDialog(QDialog):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
-        self.setWindowTitle(f"About {NAME}")
+        from kipi.gui import i18n
+        self.setWindowTitle(i18n.tr(f"About {NAME}"))
 
         icon = QLabel(self)
         from kipi.gui import logo     # it imports this module
@@ -242,7 +258,8 @@ class AboutDialog(QDialog):
             logo.still(icon, ICON_SIZE)
         icon.setAlignment(Qt.AlignTop)
 
-        dep_rows = "".join(f"<tr><td>{html.escape(k)}</td><td>&nbsp;&nbsp;{html.escape(v)}</td></tr>"
+        dep_rows = "".join(f"<tr><td>{html.escape(i18n.tr(k))}</td>"
+                           f"<td>&nbsp;&nbsp;{html.escape(i18n.tr(v) if k == 'Mode' else v)}</td></tr>"
                            for k, v in versions())
         text = QLabel(self)
         text.setTextFormat(Qt.RichText)
@@ -251,15 +268,16 @@ class AboutDialog(QDialog):
         text.setWordWrap(True)
         text.setText(
             f"<h2 style='margin-bottom:0'>{NAME}</h2>"
-            f"<p style='margin-top:2px'>Version {__version__}</p>"
-            f"<p style='margin-top:4px; margin-bottom:4px;'>{html.escape(DESCRIPTION)}<br><br>"
-            f"<a href='{html.escape(solver_guide_url())}'>Solver Guide</a>: what power "
-            f"integrity analysis is and how the solvers work</p>"
-            f"<p>Author: {AUTHOR} (<a href='mailto:{EMAIL}'>{EMAIL}</a>)<br>"
-            f"Source: <a href='{REPO}'>{REPO}</a><br>"
-            f"Report a bug: <a href='{ISSUES}'>{ISSUES}</a><br>"
-            f"License: {LICENSE}</p>"
-            f"<p><b>Running on</b></p><table>{dep_rows}</table>")
+            f"<p style='margin-top:2px'>{i18n.tr('Version')} {__version__}</p>"
+            f"<p style='margin-top:4px; margin-bottom:4px;'>"
+            f"{html.escape(i18n.tr(DESCRIPTION))}<br><br>"
+            f"<a href='{html.escape(solver_guide_url())}'>{i18n.tr('Solver Guide')}</a>: "
+            f"{i18n.tr('what power integrity analysis is and how the solvers work')}</p>"
+            f"<p>{i18n.tr('Author')}: {AUTHOR} (<a href='mailto:{EMAIL}'>{EMAIL}</a>)<br>"
+            f"{i18n.tr('Source')}: <a href='{REPO}'>{REPO}</a><br>"
+            f"{i18n.tr('Report a bug')}: <a href='{ISSUES}'>{ISSUES}</a><br>"
+            f"{i18n.tr('License')}: {LICENSE}</p>"
+            f"<p><b>{i18n.tr('Running on')}</b></p><table>{dep_rows}</table>")
 
         # Repo statistics: the cached ones now, fresh ones when the fetch returns. Without
         # either the line stays hidden; nothing here can stop the dialog opening.

@@ -24,6 +24,11 @@ from kipi.dc.pi.diagram import Block, Diagram, build_diagram, place, si
 FILL = {"rail": "#d9dde3", "link": "#fbe7b5", "load": "#f6c4c0", "cap": "#e2d4f3"}
 VRM_FILL = {"source": "#bfe3c0", "ldo": "#ffd29e", "smps": "#b9d7f5", "isolated": "#c9c3ef"}
 VRM_TAG = {"source": "SOURCE", "ldo": "LDO", "smps": "SMPS", "isolated": "ISOLATED"}
+
+
+def _tag(kind: str) -> str:
+    from kipi.gui import i18n
+    return i18n.tr(VRM_TAG.get(kind, ""))
 EDGE = {"rail": "#59616b", "link": "#a07818", "load": "#b04a42", "cap": "#7a5aa8",
         "vrm": "#3d6e9e"}
 TEXT = QColor("#1b1f24")
@@ -127,8 +132,9 @@ class PowerTreeWindow(QDialog):
         self._draw()
         notes = list(self.diagram.notes)
         if not self.diagram.blocks:
-            notes.insert(0, "Nothing to draw yet: add VRMs, loads, series links or capacitor "
-                            "models in the setup.")
+            from kipi.gui import i18n
+            notes.insert(0, i18n.tr("Nothing to draw yet: add VRMs, loads, series links or "
+                                    "capacitor models in the setup."))
         self.lbl_notes.setText("  ".join(notes))
 
     # --------------------------------------------------------------- drawing
@@ -143,7 +149,7 @@ class PowerTreeWindow(QDialog):
         fm, fmb, fms = QFontMetricsF(font), QFontMetricsF(bold), QFontMetricsF(small)
 
         def size(b: Block, compact: bool):
-            tag = VRM_TAG.get(b.vrm_kind, "") if b.kind == "vrm" else ""
+            tag = _tag(b.vrm_kind) if b.kind == "vrm" else ""
             lines = _lines(b, compact)
             w = max([fmb.horizontalAdvance(b.title)] + [fm.horizontalAdvance(t) for t in lines]
                     + [fms.horizontalAdvance(tag) if tag else 0])
@@ -218,7 +224,7 @@ class PowerTreeWindow(QDialog):
 
         y = r.top() + PAD_Y
         if b.kind == "vrm":
-            y = self._text(VRM_TAG.get(b.vrm_kind, ""), small, fms, r, y, item,
+            y = self._text(_tag(b.vrm_kind), small, fms, r, y, item,
                            QColor(EDGE["vrm"]))
         y = self._text(b.title, bold, fmb, r, y, item)
         for t in _lines(b, compact):
@@ -262,6 +268,8 @@ class PowerTreeWindow(QDialog):
         bounds = self.scene.itemsBoundingRect()
         x, y = bounds.left(), bounds.top() - fm.height() - 30
         for label, key in items:
+            from kipi.gui import i18n
+            label = i18n.tr(label)
             w = fm.horizontalAdvance(label) + 16
             r = QRectF(x, y, w, fm.height() + 8)
             vrm = key in VRM_FILL

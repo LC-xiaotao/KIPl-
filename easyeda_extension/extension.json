@@ -1,0 +1,55 @@
+{
+	"name": "kipi-power-integrity",
+	"uuid": "07ea49a74dd345a594091300ec78226c",
+	"displayName": "KiPI 电源完整性",
+	"description": "一键导出当前 PCB 的 ODB++，交给 KiPI 进行 DC 压降、电流密度、过孔电流、温度与 PDN 阻抗分析",
+	"version": "1.0.0",
+	"publisher": "KiPI",
+	"engines": {
+		"eda": ">=3.2.0"
+	},
+	"license": "GPL-3.0-or-later",
+	"repository": {
+		"type": "github",
+		"url": "https://github.com/drewsum/KiPI"
+	},
+	"categories": [
+		"PCB",
+		"Other"
+	],
+	"keywords": [
+		"Power Integrity",
+		"PDN",
+		"IR Drop",
+		"ODB++",
+		"KiPI"
+	],
+	"images": {
+		"logo": "./images/logo.png"
+	},
+	"homepage": "https://github.com/drewsum/KiPI",
+	"bugs": "https://github.com/drewsum/KiPI/issues",
+	"activationEvents": {},
+	"entry": "./dist/index",
+	"dependentExtensions": {},
+	"headerMenus": {
+		"pcb": [
+			{
+				"id": "kipi-power-integrity",
+				"title": "KiPI",
+				"menuItems": [
+					{
+						"id": "kipi-export-odb",
+						"title": "导出 ODB++ 到 KiPI…",
+						"registerFn": "exportToKipi"
+					},
+					{
+						"id": "kipi-help",
+						"title": "使用说明",
+						"registerFn": "showHelp"
+					}
+				]
+			}
+		]
+	}
+}

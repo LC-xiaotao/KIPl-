@@ -44,7 +44,8 @@ def test_the_launcher_installs_what_standalone_needs():
 def test_python_m_kipi_checks_every_standalone_package():
     """kipi/__main__.py names the module each requirement is imported under."""
     from kipi.__main__ import _MODULES
-    import_names = {"pyside6-essentials": "pyside6", "pyyaml": "yaml"}
+    import_names = {"pyside6-essentials": "pyside6", "pyyaml": "yaml",
+                    "python-docx": "docx"}
     wanted = set()
     for line in _requirements(ROOT / "requirements-standalone.txt"):
         name = line

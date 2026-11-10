@@ -95,9 +95,13 @@ SHOWN_DPI = 110
 
 def _png(fig, dpi: int = WEB_DPI) -> str:
     from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    from kipi.core.report_i18n import figure_context
     FigureCanvasAgg(fig)
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white")
+    # Every report's figures pass here: their text in the report's language (#zh).
+    with figure_context(fig):
+        fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
@@ -365,7 +369,8 @@ CSS = """
                 padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px;
                 background: var(--card); user-select: none; }
 * { box-sizing: border-box; }
-body { font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+body { font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+       "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
        margin: 0 auto; padding: 32px 28px 64px; max-width: 1240px; color: var(--fg);
        background: var(--bg); line-height: 1.5; font-size: 14px;
        -webkit-font-smoothing: antialiased; }
@@ -832,14 +837,19 @@ def maps_html(images: List[str], pdf: bool, tags: Optional[List[tuple]] = None,
 
 
 def page(title: str, body: str, css: str, script: str = "") -> str:
-    """A web page that works offline: Plotly's JavaScript in it."""
+    """A web page that works offline: Plotly's JavaScript in it. Every web report and its
+    3D views page come here, so this is where they are put in the report's language;
+    Plotly's own library is left alone."""
     import plotly.offline
+
+    from kipi.core import report_i18n as i18n
     js = plotly.offline.get_plotlyjs()
-    extra = f"<script type='text/javascript'>{THEME_JS}{script}</script>"
-    return (f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
-            f"<title>{_e(title)}</title><style data-kipi>{css}</style>"
+    extra = f"<script type='text/javascript'>{i18n.translate_js(THEME_JS + script)}</script>"
+    lang = "zh-CN" if i18n.enabled() else "en"
+    return (f"<!DOCTYPE html><html lang='{lang}'><head><meta charset='utf-8'>"
+            f"<title>{_e(i18n.tr(title))}</title><style data-kipi>{css}</style>"
             f"<script type='text/javascript'>{js}</script>{extra}</head><body>"
-            + THEME_TOGGLE + body + "</body></html>")
+            + i18n.translate_html(THEME_TOGGLE + body) + "</body></html>")
 
 
 def finish(path: Path, title: str, parts: List[str], css: str, pdf: bool,
@@ -848,10 +858,12 @@ def finish(path: Path, title: str, parts: List[str], css: str, pdf: bool,
     ``attachments`` ((file name, content, description) each) in it."""
     body = "".join(parts)
     if pdf:
+        from kipi.core import report_i18n as i18n
         from kipi.core.pdf import write_pdf
+        title = i18n.tr(title)
         return write_pdf(f"<html><head><meta charset='utf-8'><title>{_e(title)}</title>"
-                         f"</head><body>{body}</body></html>", path, title,
-                         attachments=attachments)
+                         f"</head><body>{i18n.translate_html(body)}</body></html>", path,
+                         title, attachments=attachments)
     path.write_text(page(title, body, css, SORT_JS + LAYERS_JS + VUNIT_JS + EXPAND_JS
                          + LAZY_JS),
                     encoding="utf-8")

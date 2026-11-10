@@ -53,6 +53,9 @@ def make_app(argv: Optional[List[str]] = None):
 
     _before_app()
     app = QApplication.instance() or QApplication(sys.argv if argv is None else argv)
+    # The Chinese interface, when the system is Chinese or KIPI_LANG says so.
+    from kipi.gui import i18n
+    i18n.install()
     app.setApplicationName(NAME)
     app.setDesktopFileName(DESKTOP_NAME)
     icon = app_icon()

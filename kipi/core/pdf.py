@@ -50,7 +50,8 @@ CLIP_W_PT, CLIP_H_PT = 9, 15             # the paperclip beside such a link
 CLIP_GAP_PT = 3
 # What Qt's rich text understands of the reports' style.
 CSS = """
-body { font-family: "Segoe UI", Helvetica, Arial, sans-serif; color: #222; font-size: 9pt; }
+body { font-family: "Segoe UI", Helvetica, Arial, "Microsoft YaHei", "PingFang SC",
+       "Noto Sans CJK SC", sans-serif; color: #222; font-size: 9pt; }
 h1 { font-size: 17pt; margin-bottom: 0; }
 h2 { font-size: 13pt; margin-top: 18px; color: #333; }
 h3 { font-size: 10.5pt; margin-top: 12px; }

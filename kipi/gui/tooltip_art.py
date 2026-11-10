@@ -40,8 +40,9 @@ _rendered: Dict[Tuple[str, Tuple[str, ...], str], Optional[Tuple[Path, int, int]
 
 
 def names() -> list:
-    """Every drawing in the graphics folder."""
-    return sorted(p.stem for p in GRAPHICS.glob("*.svg"))
+    """Every drawing in the graphics folder (localized variants, ``name.zh_CN``, are the
+    same drawing and are not listed)."""
+    return sorted(p.stem for p in GRAPHICS.glob("*.svg") if "." not in p.stem)
 
 
 def _mix(a: QColor, b: QColor, t: float) -> QColor:
@@ -118,7 +119,10 @@ def image(name: str, highlight: Iterable[str] = (),
         return _rendered[key]
     out = None
     try:
-        svg = fill((GRAPHICS / f"{name}.svg").read_text(encoding="utf-8"), colors, highlight)
+        from kipi.gui import i18n
+        localized = GRAPHICS / f"{name}.zh_CN.svg"
+        source = localized if i18n.language() and localized.is_file() else GRAPHICS / f"{name}.svg"
+        svg = fill(source.read_text(encoding="utf-8"), colors, highlight)
         digest = hashlib.sha1(svg.encode("utf-8")).hexdigest()[:12]
         path = Path(tempfile.gettempdir()) / "kipi" / "tooltip-art" / f"{name}-{digest}.png"
         m = _SIZE.search(svg)

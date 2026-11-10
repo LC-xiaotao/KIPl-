@@ -1,0 +1,15 @@
+{
+	"name": "kipi-easyeda-extension",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "EasyEDA Pro extension that exports the active PCB as ODB++ for KiPI",
+	"license": "GPL-3.0-or-later",
+	"scripts": {
+		"build": "node build.mjs"
+	},
+	"devDependencies": {
+		"esbuild": "^0.24.2",
+		"jszip": "^3.10.1"
+	}
+}

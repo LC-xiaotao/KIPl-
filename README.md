@@ -2,7 +2,7 @@
   <img src="resources/kipi.gif" alt="KiPI logo" width="128">
 </p>
 
-# KiPI — DC, AC and Coupled Noise Power Integrity Simulator (Standalone or KiCad Plugin)
+# KiPI — DC, AC and Coupled Noise Power Integrity Simulator (Standalone, KiCad Plugin or EasyEDA Pro)
 
 [![CI](https://github.com/drewsum/KiPI/actions/workflows/ci.yml/badge.svg)](https://github.com/drewsum/KiPI/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
@@ -14,7 +14,8 @@
 ([source](docs/solver-guide.html)): what PI analysis is, why it matters, and how KiPI's mesh
 and its DC, thermal, AC and coupled noise solvers work.
 
-KiPI is a power integrity analyzer that runs standalone or as a KiCad 9 and 10 IPC plugin. It has three
+KiPI is a power integrity analyzer that runs standalone, as a KiCad 9 and 10 IPC plugin, or
+with 嘉立创EDA专业版 (EasyEDA Pro) through its ODB++ export. It has three
 analysis modes:
 
 * **DC: Voltage Drop.** Define voltage regulators (VRMs), loads (current into pins) and series
@@ -44,7 +45,7 @@ control in KiPI has a tooltip. This README is an overview; the user guide has th
 
 ## Install
 
-KiPI runs two ways, from the same folder:
+KiPI runs from the same folder in three ways:
 
 * **As a KiCad plugin**, the main way: click the **KiPI** button in the PCB editor and KiPI
   reads the board open there. For this, the KiPI folder **must be in KiCad's plugins
@@ -54,6 +55,89 @@ KiPI runs two ways, from the same folder:
   first start. It opens KiCad 7 to 10 board files (`.kicad_pcb`), ODB++ jobs, HyperLynx
   files (`.hyp`) and KiPI snapshots (`.kipi.json.gz`). Reading CCE files is on the way
   ([#143](https://github.com/drewsum/KiPI/issues/143)).
+* **With 嘉立创EDA专业版 (EasyEDA Pro)**: a small extension exports the open PCB as
+  ODB++, which KiPI then opens. EasyEDA Pro extensions run in a JavaScript sandbox and
+  cannot start a desktop program, so the export is the hand-off between the two.
+
+### With 嘉立创EDA专业版 (EasyEDA Pro)
+
+1. Build the extension once; it needs Node.js 20+:
+
+   ```powershell
+   cd easyeda_extension
+   npm install
+   npm run build
+   ```
+
+   This writes `easyeda_extension/build/kipi-power-integrity_v1.0.0.eext`.
+
+2. In EasyEDA Pro, import it: **高级 → 扩展管理器… → 导入** (older clients:
+   **设置 → 扩展 → 扩展管理器… → 导入扩展**).
+
+3. Open a PCB and use **KiPI → 导出 ODB++ 到 KiPI…**. Save the `.tgz` file where you
+   like; it carries the copper, nets, pads, vias, board outline and stackup.
+
+4. Start KiPI standalone (`python kipi_launcher.pyw`, or the installed `kipi` command)
+   and open the saved `.tgz` with **Open**. KiPI labels it *EasyEDA Pro (ODB++)*.
+
+ODB++ has no part models, so EasyEDA Pro boards show copper, vias, pads and the outline
+in the 3D view, without component bodies. The extension source and notes live in
+[`easyeda_extension/`](easyeda_extension/README.md).
+
+### Chinese interface (简体中文)
+
+KiPI's Qt interface follows the system language: it is Chinese when Windows, macOS or
+Linux is set to Chinese, and English otherwise. `KIPI_LANG=zh_CN` forces Chinese and
+`KIPI_LANG=en` forces English, whatever the system says. The catalog lives in
+[`kipi/gui/translations/`](kipi/gui/translations/) as English-to-Chinese JSON files;
+`KIPI_I18N_LOG=<file>` writes every on-screen string the catalog does not cover, which is
+how the catalog is extended. The exported reports (HTML and PDF) follow the same language,
+with their figures in a Chinese font; their catalog is
+[`kipi/core/translations/report_zh_CN.json`](kipi/core/translations/report_zh_CN.json).
+The EasyEDA Pro extension is Chinese by default.
+
+### AI assistant (AI 助手)
+
+KiPI has a chat assistant that operates the plugin in natural language: it can read the
+open board, list nets and parts, add VRMs and loads, run the DC and Coupled Noise solves,
+run an AC impedance sweep, and export reports. Open it from **AI 助手** in the toolbar (a
+tab beside the setup panel), click **设置…**, choose a provider and enter the endpoint and
+API key. A **配置名称** names the configuration (it is shown in the panel; empty means the
+provider's name). The custom provider can speak either the OpenAI-compatible
+`chat/completions` API or **Anthropic Messages (原生)**. The interface address may be the
+API root (`https://api.example.com/v1`) or a full chat/messages endpoint; KiPI trims it to
+the root. Once the endpoint and key are filled the dialog fetches the provider's model
+list automatically (the **拉取模型** button refreshes it) and offers the models in a
+dropdown; a model name can still be typed by hand. Picking a model fills
+**最大输出 token** from the list's metadata when the provider publishes it, else from a
+known family or provider default, and the value stays editable.
+
+Providers: OpenAI, Anthropic, DeepSeek, 通义千问 (Qwen), 智谱 GLM, Kimi, Gemini, Ollama
+and a custom endpoint (vLLM, LM Studio, a gateway) speaking either the
+OpenAI-compatible chat-completions API or Anthropic Messages (原生). The presets use
+chat-completions except Anthropic, which uses its native messages API.
+The API key is kept in KiPI's local settings (plain text): use a restricted key, or a
+local model on a shared machine. `KIPI_LANG` does not affect the assistant, which answers
+in Chinese.
+
+The assistant only acts through tools, so every number it reports comes from a solve it
+ran; it is told to name the networks, parts and pins it uses and to mark assumptions
+(currents, switching frequency, inductance) as such. When the model returns its reasoning
+(DeepSeek `reasoning_content`, OpenRouter `reasoning_details`, Anthropic `thinking`), the
+reply shows it as a collapsed **▶ 思考过程（N 字）** section above the answer; click it to
+expand, click again to fold. Reasoning is not sent back in the next request. A tool run
+allows 30 model rounds by default (set **最多工具轮次** in **设置…**); reaching the limit
+pauses with a **继续** button that resumes from the last tool result instead of ending the
+task. Replies are rendered as Markdown: headings, **bold**, *italic*, lists, tables,
+quotes, code blocks and links show as formatting rather than literal syntax; links open
+in the browser when clicked. Tool output and reasoning stay plain text.
+
+Each board has its own conversation: switching boards saves the current chat and loads
+the new board's own (kept under KiPI's data folder), so reopening a project brings its
+history back. **附件…** adds PDF, Word (`.docx`), Excel/CSV (`.xlsx`, `.csv`, `.tsv`),
+text, Markdown, JSON or HTML to the next message. The text is extracted locally — 30,000
+characters per file, 60,000 per message, with a truncation note — and sent with the
+message; the file itself is never uploaded.
 
 ### As a KiCad plugin
 

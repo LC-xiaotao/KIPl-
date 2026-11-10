@@ -294,9 +294,14 @@ class Viewer3D(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # The translation layer must not walk into the VTK native window (see i18n.py).
+        self.setProperty("kipi_i18n_skip_children", True)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.plotter = QtInteractor(self)
+        # No parent here: Qt 6 does not draw the interactor's native window when it is
+        # created with this widget as its parent and this widget then goes into a
+        # QTabWidget (the 3D tab stayed black). The layout reparents it afterwards.
+        self.plotter = QtInteractor()
         layout.addWidget(self.plotter.interactor)
         self.plotter.set_background("#1e1f24", top="#3a3d46")
         # FXAA is a cheap post-process; SSAA re-renders the scene several times per frame.

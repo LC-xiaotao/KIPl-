@@ -7,6 +7,69 @@ milestones rather than versions that were ever set.
 ## 1.0.0 (in development)
 
 ### Added
+- **简体中文界面.** KiPI's Qt windows follow the system language and show Chinese on a
+  Chinese system (`KIPI_LANG=en` forces English, `KIPI_LANG=zh_CN` forces Chinese). The
+  translation is applied at the Qt boundary (`kipi/gui/i18n.py`), so the source's English
+  literals stay readable; menus, toolbars, docks, setup tables, dialogs, the 3D view's
+  controls, the stackup and tolerance drawings and Qt's own standard buttons are covered.
+  Catalogs are plain English-to-Chinese JSON files under `kipi/gui/translations/`;
+  `KIPI_I18N_LOG=<file>` lists any string still untranslated.
+
+- **AI 助手.** A chat panel that drives KiPI in natural language through tools: read the
+  board, list nets and parts, add VRMs/loads, run DC and Coupled Noise solves, add AC
+  probes and sweep a rail, read results and write HTML/PDF reports. It supports OpenAI,
+  Anthropic, DeepSeek, Qwen, Zhipu GLM, Kimi, Gemini, Ollama and a custom endpoint
+  (OpenAI-compatible or Anthropic Messages); the key, endpoint and model are set in the
+  panel and kept in KiPI's local settings. Requests run on Qt's network stack, and a solve
+  waits in a nested event loop, so the window stays responsive.
+
+- **The assistant lists the provider's models.** After the endpoint and API key are filled
+  in **设置…**, the dialog requests the provider's model list (`GET /models`, for both
+  OpenAI-compatible services and Anthropic's native API) and fills the model dropdown; the
+  **拉取模型** button refreshes it, local servers need no key, and a model name can still be
+  typed by hand. Selecting a model fills **最大输出 token** from the list's metadata, or
+  from a known model-family or provider default when the service publishes none; the value
+  stays editable.
+
+- **Custom provider settings: name and API format.** **设置…** has a **配置名称** field for
+  the configuration (shown in the assistant's header, falling back to the provider's
+  name), and a custom endpoint can use either the OpenAI-compatible `chat/completions`
+  API or **Anthropic Messages (原生)**.
+
+- **The assistant's conversation follows the project.** Each board keeps its own chat,
+  saved under KiPI's data folder (`KIPI_HOME`, by default `%LOCALAPPDATA%\KiPI`); switching
+  boards saves the current conversation and restores the new board's, and reopening a
+  board brings its history back. The model configuration stays global.
+
+- **The assistant reads attached documents.** **附件…** in the panel adds PDF (`pypdf`),
+  Word (`python-docx`), Excel and CSV/TSV tables (`openpyxl`), text, Markdown, JSON and
+  HTML to the next message. Text is extracted locally (30,000 characters per file, 60,000
+  per message, with a truncation note) and sent with the message; the file itself is not
+  uploaded. Scanned PDFs need OCR first and say so.
+
+- **The assistant folds the model's reasoning.** A reply that carries reasoning
+  (DeepSeek's `reasoning_content`, OpenRouter's `reasoning_details`, Anthropic's
+  `thinking` / `redacted_thinking` blocks) shows a collapsed **▶ 思考过程（N 字）** line
+  above the answer; clicking expands it, clicking again folds it. The reasoning is shown
+  only, not sent back in the next request.
+
+- **中文报告.** The DC, AC, Coupled Noise and Tolerance reports, HTML and PDF, follow the
+  same language as the window. Every report passes `kipi.dc.report.html.finish` and every
+  figure `_png`, so the translation sits there (`kipi/core/report_i18n.py`): headings,
+  tables, notes, verdicts (通过/失败), the solver's notes, Plotly axis and legend text, the
+  page's own buttons and messages, and matplotlib titles, labels and legends, drawn in a
+  CJK font (Microsoft YaHei, PingFang SC or Noto Sans CJK). Net names, part references,
+  layer names, units and code are left as they are, and the layer tickboxes still find
+  their traces. The catalog is `kipi/core/translations/report_zh_CN.json`; text it does not
+  know stays English. `KIPI_LANG=en` writes English reports.
+
+- **嘉立创EDA专业版 (EasyEDA Pro) support.** A small EasyEDA Pro extension
+  (`easyeda_extension/`) adds a **KiPI** menu to the PCB editor. One click exports the
+  open board as ODB++ (EasyEDA Pro's own exporter carries copper, nets, pads, vias,
+  outline and stackup) and saves it where the user chooses; the saved `.tgz` opens in
+  KiPI standalone. KiPI labels such boards *EasyEDA Pro (ODB++)* from the job's
+  `ODB_SOURCE`; the ODB++ reader is the same one KiCad exports use.
+
 - **KiCad Plugin and Content Manager package** (#7). Each release now has
   `KiPI-<version>-pcm.zip` beside `KiPI-<version>.zip`. It holds the same files under
   `plugins/`, plus the PCM metadata and a 64 px icon, so KiPI can be installed and updated
@@ -34,6 +97,44 @@ milestones rather than versions that were ever set.
   in a second one. It falls back to its own environment when KiCad has not made one, its
   Python is gone or unsupported; `--own-env` always uses its own, and `--repair` and
   `--reset` point at KiCad's *Recreate Plugin Environment* instead.
+
+### Fixed
+- **The assistant renders the model's Markdown.** Replies now show headings, bold and
+  italic text, lists, tables, quotes, code blocks and links instead of the literal
+  `**`, `-` and `|` syntax. Tool output and reasoning stay plain text, and links open in
+  the browser on click.
+
+- **A long tool run pauses instead of ending.** The assistant allowed only 10 model
+  rounds, so a legitimate multi-step task stopped with "工具调用次数过多". It now allows
+  30 rounds by default, the cap is **最多工具轮次** in **设置…** (1–200), and reaching it
+  pauses the run with a **继续** button that resumes from the last tool result. The system
+  prompt also asks the model to batch operations where a tool takes a list.
+
+- **The assistant finds the API root even from a full endpoint address.** A pasted
+  `.../v1/chat/completions` or `.../v1/messages` is trimmed to its base for chat and for
+  the model list. A 404 on `/models` retries `.../v1/models` once and, when that answers,
+  keeps the endpoint that worked; failures now name the HTTP status and the URL requested
+  instead of just "Not Found".
+
+- **The setup dock shrinks with the window.** The right dock had a fixed 420 px minimum
+  width and its forms kept their content's width, so a narrow window squeezed the 3D view
+  and clipped the panel. Long form rows now wrap, fields give up width before the panel,
+  tables scroll sideways, the dock's minimum is 300 px (the board dock's 260), and
+  switching analysis modes puts the panel back at its top-left.
+
+- **The 3D view draws inside its tab on Qt 6.** The Chinese interface's event filter
+  translated every widget below each newly shown window, which walked into VTK's native
+  render window and left the 3D tab black. The filter now translates only the widget that
+  was shown (menus and toolbars translate their own actions); the VTK interactor is also
+  created without a parent and is skipped by the translation layer.
+
+- **嘉立创EDA专业版 ODB++ exports read at the right scale.** EasyEDA Pro writes
+  `UNITS=MM` in the step header, profile and layer attribute lists but omits it from
+  `misc/info`, so KiPI fell back to ODB++'s inches and scaled every coordinate and
+  thickness by 25.4. It also writes `35.0012` in `.copper_weight` for 35 µm copper,
+  which was read as 35 oz (1.225 mm). Units now come from the step when `misc/info`
+  has none, and a copper weight above 5 is read as µm. A 0.48 mm dielectric and 35 µm
+  copper now give the expected 1.58 mm four-layer stackup.
 
 ### Changed
 - **KiPI is stable.** The README no longer calls it alpha, and the minimum KiCad is now

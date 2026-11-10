@@ -12,3 +12,6 @@ pyamg>=5.0
 plotly>=5.20
 matplotlib>=3.8
 PyYAML>=6.0
+pypdf>=4.0
+python-docx>=1.1
+openpyxl>=3.1

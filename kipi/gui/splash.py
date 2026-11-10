@@ -19,7 +19,7 @@ from qtpy.QtGui import QCursor, QGuiApplication, QPalette
 from qtpy.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from kipi import __version__
-from kipi.gui import about, logo as logo_art
+from kipi.gui import about, i18n, logo as logo_art
 from kipi.gui.identity import APP_ID
 from kipi.host import Host, current as current_host
 
@@ -53,12 +53,13 @@ class Splash(QWidget):
             logo_art.still(logo, LOGO_SIZE)
 
         host = current_host()
-        rows = [("Author", f"{about.AUTHOR} ({about.EMAIL})"), ("Version", __version__),
-                ("Mode", host.label)]
+        rows = [(i18n.tr("Author"), f"{about.AUTHOR} ({about.EMAIL})"),
+                (i18n.tr("Version"), __version__),
+                (i18n.tr("Mode"), i18n.tr(host.label))]
         if host is Host.PLUGIN:
-            rows.append(("Plugin", APP_ID))
-        rows.append(("License", about.LICENSE))
-        rows += [(k, v) for k, v in about.versions(solver=False)
+            rows.append((i18n.tr("Plugin"), APP_ID))
+        rows.append((i18n.tr("License"), about.LICENSE))
+        rows += [(i18n.tr(k), v) for k, v in about.versions(solver=False)
                  if k == "Python" or k in PACKAGES]
         dim = self.palette().color(QPalette.PlaceholderText).name()
         table = "".join(f"<tr><td style='color:{dim}'>{html.escape(k)}</td>"
@@ -67,8 +68,9 @@ class Splash(QWidget):
         text.setTextFormat(Qt.RichText)
         text.setWordWrap(True)
         text.setText(
-            f"<h1 style='margin:0'>Welcome to {about.NAME}</h1>"
-            f"<p style='margin-top:4px; margin-bottom:12px;'>{html.escape(about.DESCRIPTION)}<br></p>"
+            f"<h1 style='margin:0'>{html.escape(i18n.tr('Welcome to ' + about.NAME))}</h1>"
+            f"<p style='margin-top:4px; margin-bottom:12px;'>"
+            f"{html.escape(i18n.tr(about.DESCRIPTION))}<br></p>"
             f"<table>{table}</table>"
             f"<p style='margin-bottom:0'>{about.REPO}</p>")
         self.status = QLabel("Starting…", frame)

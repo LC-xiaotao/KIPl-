@@ -13,14 +13,14 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from qtpy.QtCore import QFileSystemWatcher, QSettings, Qt, QTimer
+from qtpy.QtCore import QFileSystemWatcher, QSettings, Qt, QTimer, Signal
 from qtpy.QtGui import QAction, QColor, QIcon, QPixmap, QTextCursor
 from qtpy.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu,
-    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QRadioButton, QSizePolicy, QSlider,
-    QScrollArea, QSplitter, QStackedWidget, QTabWidget, QTextBrowser, QToolBar, QToolButton,
-    QVBoxLayout, QWidget,
+    QAbstractScrollArea, QAbstractSpinBox, QButtonGroup, QCheckBox, QComboBox, QDockWidget,
+    QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
+    QPushButton, QRadioButton, QSizePolicy, QSlider, QScrollArea, QSplitter, QStackedWidget,
+    QTabWidget, QTableWidget, QTextBrowser, QToolBar, QToolButton, QVBoxLayout, QWidget,
 )
 
 from kipi import __version__
@@ -85,7 +85,40 @@ def _scrolling(widget: QWidget) -> QScrollArea:
     area.setWidgetResizable(True)
     area.setFrameShape(QScrollArea.NoFrame)
     area.setWidget(widget)
+    # A narrow dock scrolls sideways rather than resizing the window's other areas away.
+    area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    try:
+        area.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+    except AttributeError:              # Qt 5 spelling
+        area.setSizeAdjustPolicy(QAbstractScrollArea.AdjustIgnored)
     return area
+
+
+def _adapt_panel(panel: QWidget) -> None:
+    """Let a setup panel shrink with its dock: long form rows wrap, fields give up width
+    before the panel does, and tables scroll sideways. Without this the right dock kept
+    its content's width and squeezed the 3D view (and clipped itself) on a small window."""
+    panel.setMinimumWidth(0)
+    panel.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+    for form in panel.findChildren(QFormLayout):
+        for name, value in (("WrapLongRows", "RowWrapPolicy"),):
+            policy = getattr(QFormLayout, name, None) or getattr(
+                getattr(QFormLayout, value, object), name, None)
+            if policy is not None:
+                form.setRowWrapPolicy(policy)
+        growth = getattr(QFormLayout, "AllNonFixedFieldsGrow", None) or getattr(
+            getattr(QFormLayout, "FieldGrowthPolicy", object), "AllNonFixedFieldsGrow", None)
+        if growth is not None:
+            form.setFieldGrowthPolicy(growth)
+    for field in panel.findChildren(QWidget):
+        if isinstance(field, (QComboBox, QLineEdit, QAbstractSpinBox)):
+            field.setMinimumWidth(56)
+            field.setSizePolicy(QSizePolicy.Expanding, field.sizePolicy().verticalPolicy())
+        elif isinstance(field, QTableWidget):
+            field.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+            field.horizontalHeader().setMinimumSectionSize(24)
+    for table in panel.findChildren(QTableWidget):
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
 
 def fit_to_screen(window: QMainWindow) -> None:
@@ -125,6 +158,8 @@ def write_report_file(write, path, progress):
 
 
 class MainWindow(QMainWindow):
+    #: Emitted once a board has become the window's snapshot (the assistant follows it).
+    board_changed = Signal(object)
     def __init__(self, source: Optional[BoardSource] = None, tool: Optional[InstalledTool] = None,
                  snapshot: Optional[BoardSnapshot] = None, host: Optional[Host] = None):
         """``source`` is where Load reads the board from (None: no board yet, or only
@@ -197,7 +232,9 @@ class MainWindow(QMainWindow):
         from kipi.noise.gui.plot import NoisePlot
         self.views = QTabWidget(self)
         self.views.setDocumentMode(True)
-        self.viewer = Viewer3D(self.views)
+        # No parent: a Qt 6 native window created with the tab widget as its ancestor
+        # before addTab() does not draw (the 3D tab stayed black). addTab reparents it.
+        self.viewer = Viewer3D()
         self.plot = ImpedancePlot(self.views)
         self.board_map = BoardMap(self.views)
         self.transient_plot = TransientPlot(self.views)
@@ -233,6 +270,7 @@ class MainWindow(QMainWindow):
     def _build_toolbar(self):
         tb = QToolBar("Main", self)
         tb.setMovable(False)
+        self.toolbar = tb
         self.addToolBar(tb)
 
         def act(text, slot, tip="", keys="", view=False):
@@ -375,6 +413,9 @@ class MainWindow(QMainWindow):
         else:
             self._mode_panel().reload()
         self.setup_stack.setCurrentWidget(self._mode_panel())
+        # The new panel starts at its top-left, not where the last one was scrolled to.
+        self.setup_scroll.verticalScrollBar().setValue(0)
+        self.setup_scroll.horizontalScrollBar().setValue(0)
         self.solve_dock.setWindowTitle(next(t for k, _, t in MODES if k == mode))
         self._set_open_results_tip()
         self._set_plot_tabs(mode)
@@ -431,6 +472,11 @@ class MainWindow(QMainWindow):
             rb.blockSignals(True)
             rb.setChecked(True)          # the group unchecks the other button
             rb.blockSignals(False)
+
+    def show_assistant(self):
+        """Bring the AI assistant's tab to the front."""
+        self.assistant.show()
+        self.assistant.raise_()
 
     def show_about(self):
         from kipi.gui.about import AboutDialog
@@ -698,7 +744,7 @@ class MainWindow(QMainWindow):
         dock.setObjectName("board_dock")
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
         dock.setWidget(_scrolling(panel))
-        dock.setMinimumWidth(300)
+        dock.setMinimumWidth(260)
         make_detachable(dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
 
@@ -754,21 +800,42 @@ class MainWindow(QMainWindow):
         self.setup_bar.save_requested.connect(self._save_setup)
         self.setup_bar.setEnabled(False)                       # until a board is read
         self.setup_stack = QStackedWidget(self)
+        self.setup_stack.setMinimumWidth(0)
+        self.setup_stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         for panel in self._panels().values():
+            _adapt_panel(panel)
             self.setup_stack.addWidget(panel)
         holder = QWidget(self)
         col = QVBoxLayout(holder)
         col.setContentsMargins(0, 0, 0, 0)
         col.addWidget(self.setup_bar)
-        col.addWidget(_scrolling(self.setup_stack), 1)
+        self.setup_scroll = _scrolling(self.setup_stack)
+        self.setup_scroll.setMinimumWidth(0)
+        col.addWidget(self.setup_scroll, 1)
         dock = QDockWidget(MODES[0][2], self)
         dock.setObjectName("solve_dock")
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
         dock.setWidget(holder)
         self.solve_dock = dock
-        dock.setMinimumWidth(420)
+        dock.setMinimumWidth(300)
         make_detachable(dock)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self._last_solve_error = None
+        self._last_ac_error = None
+        self._last_noise_error = None
+        # The AI assistant shares the right dock area, as a tab beside the setup panel.
+        from kipi.gui.assistant.panel import AssistantDock
+        self.assistant = AssistantDock(self)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.assistant)
+        self.tabifyDockWidget(self.solve_dock, self.assistant)
+        self.solve_dock.raise_()          # the setup stays in front; AI is its tab
+        make_detachable(self.assistant)
+        self.act_assistant = QAction("AI 助手", self)
+        self.act_assistant.setToolTip("用自然语言操作仿真（先在助手中配置模型供应商和 API Key）")
+        self.act_assistant.triggered.connect(self.show_assistant)
+        # Before "Open results…": the mode buttons stay the toolbar's last controls.
+        self.toolbar.insertSeparator(self.act_open_results)
+        self.toolbar.insertAction(self.act_open_results, self.act_assistant)
         self._result = None
 
     def _build_log_dock(self):
@@ -1130,6 +1197,7 @@ class MainWindow(QMainWindow):
         self.viewer.set_board(*board_body(snap))
         self._coatings_wanted = True        # built with the nets, off the UI thread (#209)
         self.sync_nets()
+        self.board_changed.emit(snap)
 
     def _load_layer_colors(self, snap: BoardSnapshot):
         """Color the copper layers like the PCB editor's color theme, read again on every
@@ -1696,8 +1764,10 @@ class MainWindow(QMainWindow):
         def done(out):
             tree, scenes = out
             if tree is None:
+                self._last_solve_error = scenes
                 self.solve_panel.show_error(scenes)
                 return
+            self._last_solve_error = None
             self._set_tree(tree, scenes)
             self.solve_panel.set_report(None)
             first = tree.loads[0].group if tree.loads else next(iter(tree.groups))
@@ -1823,8 +1893,10 @@ class MainWindow(QMainWindow):
         def done(out):
             result, error = out
             if result is None:
+                self._last_ac_error = error
                 self.ac_panel.show_error(error)
                 return
+            self._last_ac_error = None
             self.ac_panel.show_result(result)
             self.tolerance_view.add_ac(result, "AC solve", _now())
 
@@ -1879,8 +1951,10 @@ class MainWindow(QMainWindow):
         def done(out):
             result, error = out
             if result is None:
+                self._last_noise_error = error
                 self.noise_panel.show_error(error)
                 return
+            self._last_noise_error = None
             self.noise_panel.show_result(result)
             self.tolerance_view.add_noise(result, "Noise solve", _now())
 
@@ -2495,6 +2569,9 @@ class MainWindow(QMainWindow):
         if not self._keep_or_drop_changes():
             event.ignore()
             return
+        assistant = getattr(self, "assistant", None)
+        if assistant is not None:
+            assistant.save_conversation()
         self._model_timer.stop()            # start no kicad-cli for a closed window
         self._changed_timer.stop()
         self._models_pending = False
