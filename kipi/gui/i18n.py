@@ -240,6 +240,9 @@ def tr(text: Any) -> Any:
     m = re.match(r"^Point (\d+)$", text)
     if m:
         return f"点 {m.group(1)}"
+    m = re.match(r"^DC Accuracy Calculator: (.+)$", text)
+    if m:
+        return f"DC 精度计算器：{m.group(1)}"
     m = re.match(r"^(.*) \(standalone\)$", text)
     if m:
         return f"{tr(m.group(1))}（独立版）"

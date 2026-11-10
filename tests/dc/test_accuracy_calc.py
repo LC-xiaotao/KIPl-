@@ -41,6 +41,28 @@ def test_invalid_feedback_divider_inputs_have_no_result(args):
     assert feedback_divider_accuracy(*args) is None
 
 
+def test_calculator_dialog_is_chinese(app, monkeypatch):
+    from qtpy.QtWidgets import QLabel
+    from kipi.gui import i18n
+    from kipi.dc.gui.accuracy_calc import DcAccuracyCalculator
+
+    monkeypatch.setenv("KIPI_LANG", "zh_CN")
+    i18n.install()
+    i18n._ENABLED = None
+    try:
+        dialog = DcAccuracyCalculator(vrm_name="U1")
+        dialog.show()
+        app.processEvents()
+        assert dialog.windowTitle() == "DC 精度计算器：U1"
+        labels = [label.text() for label in dialog.findChildren(QLabel)]
+        assert "FB 基准最小值" in labels
+        assert "最小输出" in labels
+        assert any("最坏组合" in text for text in labels)
+        dialog.close()
+    finally:
+        i18n._ENABLED = None
+
+
 def test_calculator_updates_vrm_nominal_and_absolute_limits(app, monkeypatch):
     from kipi.dc.gui import accuracy_calc
     from kipi.dc.gui.pi_panel import PIPanel
