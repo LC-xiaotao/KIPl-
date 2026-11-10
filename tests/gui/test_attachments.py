@@ -26,12 +26,14 @@ def test_text_csv_and_html(tmp_path):
     assert "secret" not in attachment.text
 
 
-def test_a_long_file_is_truncated(tmp_path):
+def test_a_long_file_keeps_the_full_text(tmp_path):
     path = tmp_path / "long.txt"
     path.write_text("x" * (MAX_FILE_CHARS + 100), encoding="utf-8")
     attachment = extract_attachment(path)
-    assert "已截断" in attachment.note
+    assert len(attachment.full_text) > len(attachment.text)
     assert attachment.text.endswith("已截断）")
+    assert "随消息发送前" in attachment.note
+    assert not attachment.complete
 
 
 def test_docx_and_xlsx(tmp_path):
@@ -61,6 +63,7 @@ def test_pdf_page_count(tmp_path):
     writer.write(tmp_path / "blank.pdf")
     attachment = extract_attachment(tmp_path / "blank.pdf")
     assert "PDF，1 页" in attachment.note
+    assert len(attachment.pages) == 1 and attachment.pages[0][0] == 1
 
 
 def test_a_binary_file_is_refused(tmp_path):

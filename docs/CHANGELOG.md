@@ -11,6 +11,7 @@ milestones rather than versions that were ever set.
 ### 新增
 
 - **嘉立创EDA专业版集成**：新增 `easyeda_extension` 扩展，一键把当前 PCB 导出为 ODB++，供 KiPI 独立版打开；KiPI 会把这类板卡标记为 *EasyEDA Pro (ODB++)*。
+- **长附件全文检索**：附件完整文本保存在当前对话中，新增 `list_attachments`、`search_attachment`、`read_attachment` 工具；47 页 PDF 只随消息发送开头部分，助手可按关键词搜索或按页读取全文并注明页码。
 - **AI 助手支持 DC 热分析**：新增 `set_thermal` 工具，可开启/关闭电热耦合、设置环境温度、气流、迭代次数、负载发热和温度限值；`get_setup` / `get_context` 返回热设置，`solve_dc` 结果包含各铜层峰值温度、温升和 PASS/FAIL。
 - **AI 助手快速模式**：面板新增 **快速** 复选框，放粗 DC/AC 网格、减少 AC 扫频点、关闭噪声板级模型并减少谐波；求解结果会标注 `fast=true`，并返回 `elapsed_s` 便于判断耗时。标准模式不受影响。
 - **AI 助手响应优化**：模型思考时显示已用时间；发送给模型的历史只保留最近对话，过长的工具结果和旧附件会截断，减少上下文带来的延迟。

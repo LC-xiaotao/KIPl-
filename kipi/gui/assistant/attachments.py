@@ -10,15 +10,18 @@ from __future__ import annotations
 import csv
 import io
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Tuple
 
-#: Characters kept from one file, and from all files in one message.
+#: Characters sent with the message, and from all files in one message.
 MAX_FILE_CHARS = 30_000
 MAX_TOTAL_CHARS = 60_000
-MAX_PDF_PAGES = 80
+#: The full text kept for search/read tools; far more than one message carries.
+MAX_FULL_CHARS = 1_000_000
+MAX_PDF_PAGES = 200
 MAX_TABLE_ROWS = 200
 
 TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".log", ".py", ".json", ".yaml", ".yml", ".xml"}
@@ -28,11 +31,21 @@ HTML_SUFFIXES = {".html", ".htm"}
 
 @dataclass
 class Attachment:
-    """One file ready to be sent with a message."""
+    """One file: its opening text for the message, and the full text for the tools."""
 
     name: str
     text: str
     note: str
+    full_text: str = ""
+    pages: List[Tuple[int, str]] = field(default_factory=list)
+
+    @property
+    def chars(self) -> int:
+        return len(self.full_text or self.text)
+
+    @property
+    def complete(self) -> bool:
+        return self.chars <= len(self.text)
 
 
 class _HTMLText(HTMLParser):
@@ -153,37 +166,48 @@ def _plain(path: Path) -> tuple[str, str]:
     return text, "文本"
 
 
+def _pdf_pages(text: str) -> List[Tuple[int, str]]:
+    parts = re.split(r"(?m)^\[第 (\d+) 页\]\s*$", text)
+    return [(int(parts[i]), parts[i + 1].strip())
+            for i in range(1, len(parts) - 1, 2)]
+
+
 def extract_attachment(path: Path, limit: int = MAX_FILE_CHARS) -> Attachment:
-    """Read one file into text and a short human-readable note."""
+    """Read one file: the opening text for the message, and the full text for tools."""
     path = Path(path)
     suffix = path.suffix.lower()
     try:
         if suffix == ".pdf":
-            text, note = _pdf(path)
+            full_text, note = _pdf(path)
         elif suffix == ".docx":
-            text, note = _docx(path)
+            full_text, note = _docx(path)
         elif suffix in (".xlsx", ".xlsm"):
-            text, note = _xlsx(path)
+            full_text, note = _xlsx(path)
         elif suffix in TABLE_SUFFIXES:
-            text, note = _csv(path)
+            full_text, note = _csv(path)
         elif suffix in HTML_SUFFIXES:
-            text, note = _html(path)
+            full_text, note = _html(path)
         elif suffix in TEXT_SUFFIXES or suffix == "":
-            text, note = _plain(path)
+            full_text, note = _plain(path)
         elif suffix == ".xls":
             raise ValueError("旧版 .xls 暂不支持，请另存为 .xlsx 或 CSV")
         else:
-            text, note = _plain(path)
+            full_text, note = _plain(path)
     except ImportError as exc:
         raise ValueError(f"缺少读取该文件所需的库（{exc.name}），请先安装") from exc
     except ValueError:
         raise
     except Exception as exc:  # noqa: BLE001 - a damaged file becomes a message for the user
         raise ValueError(f"读取失败：{exc}") from exc
-    text, cut = _truncate(text, limit)
-    if not text:
+    full_text = (full_text or "").strip()
+    if len(full_text) > MAX_FULL_CHARS:
+        full_text = full_text[:MAX_FULL_CHARS].rstrip() + "\n…（文件过长，只保留前 100 万字）"
+    digest, cut = _truncate(full_text, limit)
+    if not digest:
         return Attachment(path.name, "（没有提取到文字；如果是扫描版 PDF，需要先做 OCR。）",
                           f"{note}，未提取到文字")
-    chars = f"{len(text):,} 字"
-    note = f"{note}，{chars}" + ("，已截断" if cut else "")
-    return Attachment(path.name, text, note)
+    pages = _pdf_pages(full_text) if suffix == ".pdf" else []
+    chars = f"{len(full_text):,} 字"
+    sent = f"，随消息发送前 {len(digest):,} 字" if cut else ""
+    note = f"{note}，{chars}{sent}"
+    return Attachment(path.name, digest, note, full_text, pages)

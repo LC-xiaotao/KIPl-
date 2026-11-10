@@ -516,6 +516,28 @@ def test_dock_shows_the_custom_config_name():
     assert "公司网关" in dock.lbl_provider.text()
 
 
+def test_attachment_tools_search_pages_and_read():
+    from kipi.gui.assistant.attachments import Attachment
+
+    main = _Main()
+    runner = ToolRunner(main)
+    pages = [(n, ("3V3 thermal " if n == 7 else "other ") * 20) for n in range(1, 10)]
+    full_text = "\n".join(f"[第 {n} 页]\n{text}" for n, text in pages)
+    runner.attachments = {
+        "spec.pdf": Attachment("spec.pdf", "digest", "PDF，9 页", full_text, pages),
+    }
+    listed = json.loads(runner.run("list_attachments", {}))
+    assert listed["attachments"][0]["pages"] == 9
+    assert not listed["attachments"][0]["complete"]
+
+    hits = json.loads(runner.run("search_attachment", {"query": "thermal"}))
+    assert hits["count"] and hits["hits"][0]["page"] == 7
+
+    read = json.loads(runner.run("read_attachment", {
+        "name": "spec.pdf", "start_page": 7, "end_page": 7}))
+    assert "3V3 thermal" in read["text"] and read["start_page"] == 7
+
+
 def test_thermal_settings_can_be_set_from_the_assistant():
     main = _Main()
     runner = ToolRunner(main)

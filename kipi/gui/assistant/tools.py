@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -102,6 +103,15 @@ def _round(x, n=4):
 
 FAST_NOTE = ("快速模式：网格、扫频点或谐波已简化，结果适合快速判断；"
              "需要精确结果请关闭“快速”后重新求解。")
+ATTACHMENT_READ_CHARS = 7_000
+
+
+def _attachment_page(attachment, offset: int) -> Optional[int]:
+    if not attachment.pages:
+        return None
+    text = attachment.full_text or ""
+    hits = list(re.finditer(r"\[第 (\d+) 页\]", text[:offset + 1]))
+    return int(hits[-1].group(1)) if hits else 1
 
 
 def _thermal_dict(thermal) -> dict:
@@ -185,6 +195,19 @@ TOOLS: List[dict] = [
            "max_temp_c": {"type": "number", "description": "铜温上限 °C，可选"},
            "max_rise_c": {"type": "number", "description": "相对环境温升上限 °C，可选"},
            "clear_limits": {"type": "boolean", "description": "清除铜温/温升限值"}}),
+    _tool("list_attachments", "列出当前对话上传的附件：名称、页数、字数和是否完整。", {}),
+    _tool("search_attachment", "在附件全文中搜索关键词，返回页码和上下文。",
+          {"name": {"type": "string", "description": "附件名，留空搜索全部附件"},
+           "query": {"type": "string", "description": "关键词或短语"},
+           "max_hits": {"type": "integer", "description": "最多返回多少条，默认 8"}},
+          ["query"]),
+    _tool("read_attachment", "读取附件的指定页或字符范围（每次最多约 7000 字）。",
+          {"name": {"type": "string", "description": "附件名"},
+           "start_page": {"type": "integer", "description": "起始页（PDF，从 1 开始）"},
+           "end_page": {"type": "integer", "description": "结束页（含）"},
+           "offset": {"type": "integer", "description": "字符偏移，非 PDF 或按字符读取"},
+           "length": {"type": "integer", "description": "读取字符数，默认 7000"}},
+          ["name"]),
     _tool("set_nets", "勾选要参与仿真的网络（板卡面板中的网络列表）。",
           {"nets": {"type": "array", "items": {"type": "string"},
                     "description": "要勾选的网络名列表"}}, ["nets"]),
@@ -259,6 +282,7 @@ class ToolRunner:
     def __init__(self, main, fast: bool = False):
         self.main = main
         self.fast = fast
+        self.attachments = {}
 
     # -- waiting ----------------------------------------------------------
     def _pending(self) -> bool:
@@ -417,6 +441,76 @@ class ToolRunner:
             thermal.max_rise_c = float(args["max_rise_c"])
         _refresh(main)
         return {"thermal": _thermal_dict(thermal)}
+
+    def tool_list_attachments(self, args) -> dict:
+        attachments = []
+        for attachment in self.attachments.values():
+            attachments.append({
+                "name": attachment.name, "note": attachment.note,
+                "pages": len(attachment.pages) or None,
+                "chars": attachment.chars,
+                "sent_chars": len(attachment.text),
+                "complete": attachment.complete,
+                "preview": (attachment.text[:300] + "…"
+                            if len(attachment.text) > 300 else attachment.text),
+            })
+        return {"count": len(attachments), "attachments": attachments}
+
+    def tool_search_attachment(self, args) -> dict:
+        query = str(args.get("query") or "").strip()
+        if not query:
+            raise ValueError("query 不能为空")
+        name = str(args.get("name") or "").strip()
+        limit = max(1, min(int(args.get("max_hits") or 8), 20))
+        selected = [a for a in self.attachments.values()
+                    if not name or a.name == name]
+        if not selected:
+            raise ValueError("当前对话没有这个附件")
+        hits = []
+        needle = query.lower()
+        for attachment in selected:
+            text = attachment.full_text or attachment.text
+            lowered = text.lower()
+            start = 0
+            while len(hits) < limit:
+                index = lowered.find(needle, start)
+                if index < 0:
+                    break
+                left = max(0, index - 250)
+                right = min(len(text), index + len(query) + 250)
+                hits.append({"name": attachment.name,
+                             "page": _attachment_page(attachment, index),
+                             "offset": index, "snippet": text[left:right]})
+                start = index + max(1, len(query))
+        return {"query": query, "count": len(hits), "hits": hits}
+
+    def tool_read_attachment(self, args) -> dict:
+        name = str(args.get("name") or "").strip()
+        attachment = self.attachments.get(name)
+        if attachment is None:
+            raise ValueError(f"当前对话没有附件 {name}")
+        start_page = args.get("start_page")
+        end_page = args.get("end_page")
+        if attachment.pages and (start_page is not None or end_page is not None):
+            first = max(1, int(start_page or 1))
+            last = min(len(attachment.pages), int(end_page or first))
+            if first > len(attachment.pages):
+                raise ValueError(f"起始页超出范围（共 {len(attachment.pages)} 页）")
+            if last < first:
+                raise ValueError("end_page 不能小于 start_page")
+            full = "\n\n".join(f"[第 {n} 页]\n{t}" for n, t in attachment.pages
+                               if first <= n <= last)
+            text = full[:ATTACHMENT_READ_CHARS]
+            return {"name": attachment.name, "start_page": first, "end_page": last,
+                    "total_pages": len(attachment.pages), "chars": len(full),
+                    "text": text, "truncated": len(text) < len(full)}
+        full = attachment.full_text or attachment.text
+        offset = max(0, int(args.get("offset") or 0))
+        length = max(1, min(int(args.get("length") or ATTACHMENT_READ_CHARS), 20_000))
+        text = full[offset:offset + length]
+        return {"name": attachment.name, "offset": offset, "total_chars": len(full),
+                "chars": len(text), "text": text,
+                "truncated": offset + len(text) < len(full)}
 
     def tool_set_nets(self, args) -> dict:
         snap = self.main.snapshot
