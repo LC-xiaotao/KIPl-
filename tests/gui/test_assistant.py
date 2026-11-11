@@ -691,3 +691,92 @@ def test_settings_dialog_fetches_models_automatically_once(monkeypatch):
     dialog._maybe_fetch_models()
     assert calls == ["https://api.deepseek.com/v1"]
     dialog.reject()
+
+
+def test_tool_calls_fold_into_one_block(monkeypatch):
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    dock.config = Config(provider="DeepSeek", api_key="k")
+    calls = []
+
+    def send(config, system, history, tools):
+        calls.append(list(history))
+        if len(calls) == 1:
+            dock.client.done.emit({"choices": [{"message": {
+                "content": "",
+                "tool_calls": [
+                    {"id": "c1", "type": "function",
+                     "function": {"name": "get_context", "arguments": "{}"}},
+                    {"id": "c2", "type": "function",
+                     "function": {"name": "list_nets", "arguments": "{}"}},
+                ]}}]}, "")
+        else:
+            dock.client.done.emit({"choices": [{"message": {"content": "完成"}}]}, "")
+
+    monkeypatch.setattr(dock.client, "send", send)
+    dock.input.setPlainText("看看板卡")
+    dock._send()
+
+    indexes = [i for i, item in enumerate(dock._items) if item["kind"] == "tools"]
+    assert len(indexes) == 1
+    index = indexes[0]
+    assert len(dock._items[index]["calls"]) == 2
+    assert not dock._items[index]["expanded"]
+    text = dock.view.toPlainText()
+    assert "工具调用 2 次" in text and "get_context" in text and "list_nets" in text
+    assert '"board"' not in text            # the raw result stays folded
+
+    dock._anchor_clicked(QUrl(f"kipi-tools:{index}"))
+    text = dock.view.toPlainText()
+    assert dock._items[index]["expanded"]
+    assert '"board"' in text and "执行中" not in text
+
+    dock._anchor_clicked(QUrl(f"kipi-tools:{index}"))
+    assert not dock._items[index]["expanded"]
+    assert '"board"' not in dock.view.toPlainText()
+
+
+def test_old_tool_messages_are_folded_when_loaded(tmp_path):
+    from kipi.gui.assistant.panel import AssistantDock
+    from kipi.gui.assistant.store import ConversationStore
+
+    store = ConversationStore(tmp_path)
+    store.use("old")
+    store.save({
+        "version": 1,
+        "history": [],
+        "items": [
+            {"kind": "message", "speaker": "你", "text": "看看板卡",
+             "color": "#1f5fa8", "markdown": False},
+            {"kind": "message", "speaker": "", "text": "🔧 get_context {}",
+             "color": "#777", "markdown": False},
+            {"kind": "message", "speaker": "", "text": '{"board": {"name": "test"}}',
+             "color": "#555", "markdown": False},
+            {"kind": "message", "speaker": "", "text": "🔧 list_nets {}",
+             "color": "#777", "markdown": False},
+            {"kind": "message", "speaker": "", "text": '{"nets": []}',
+             "color": "#555", "markdown": False},
+            {"kind": "message", "speaker": "", "text": "📎 spec.pdf（PDF，1 页）",
+             "color": "#777", "markdown": False},
+        ],
+    })
+    dock = AssistantDock(_Main())
+    dock.store = store
+    dock._load_conversation()
+
+    assert [item["kind"] for item in dock._items].count("tools") == 1
+    tools = next(item for item in dock._items if item["kind"] == "tools")
+    assert [call["name"] for call in tools["calls"]] == ["get_context", "list_nets"]
+    text = dock.view.toPlainText()
+    assert "工具调用 2 次" in text
+    assert '"board"' not in text
+    assert "📎" not in text and "附件：spec.pdf" in text
+
+
+def test_markdown_headings_use_the_transcript_style():
+    from kipi.gui.assistant.panel import _markdown_html
+
+    body = _markdown_html("## 结论\n\n正文 **粗体**")
+    assert "x-large" not in body
+    assert "font-weight:700" in body

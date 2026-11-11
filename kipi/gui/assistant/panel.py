@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from qtpy.QtCore import QElapsedTimer, QEvent, QSettings, Qt, QTimer, QUrl
-from qtpy.QtGui import QDesktopServices, QTextDocument
+from qtpy.QtGui import QDesktopServices, QTextDocument, QTextOption
 from qtpy.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox,
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
@@ -54,6 +54,38 @@ def _fast_default() -> bool:
     return bool(value)
 
 _BODY_RE = re.compile(r"<body[^>]*>(.*)</body>", re.DOTALL | re.IGNORECASE)
+# QTextDocument's markdown converter bakes a block margin into every paragraph and list
+# item, and sizes headings with an inline font-size; both override the transcript's own
+# stylesheet. Removed here so every message lines up the same way.
+_STYLE_NOISE_RE = re.compile(
+    r"\s*(?:margin-(?:top|bottom|left|right)\s*:\s*[^;\"']*;"
+    r"|-qt-block-indent\s*:\s*[^;\"']*;"
+    r"|text-indent\s*:\s*[^;\"']*;)")
+_LARGE_FONT_RE = re.compile(r"\s*font-size\s*:\s*(?:xx-large|x-large|large)\s*;?")
+
+# The chat transcript's stylesheet. Qt's rich text engine understands the subset below;
+# keep colours inline on the cards so they read the same on every platform.
+_CHAT_CSS = """
+body { font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; font-size: 10pt; color: #222; }
+p { margin: 4px 0; }
+h1, h2, h3, h4, h5, h6 { font-size: 11pt; margin: 8px 0 3px 0; color: #1b1b1b; }
+ul, ol { margin: 3px 0 3px 18px; }
+li { margin: 2px 0; }
+pre { background-color: #f4f5f7; margin: 4px 0; padding: 6px; white-space: pre-wrap; }
+code { background-color: #f0f1f3; font-family: Consolas, 'Courier New', monospace; }
+table { border-collapse: collapse; margin: 5px 0; }
+td, th { border: 1px solid #d8dbe0; padding: 3px 6px; }
+a { color: #2a5d9f; text-decoration: none; }
+"""
+
+_USER_BG, _USER_ACCENT, _USER_LABEL = "#eaf2fb", "#5b8fc9", "#2a5d9f"
+_ASSISTANT_BG, _ASSISTANT_ACCENT, _ASSISTANT_LABEL = "#f6f7f9", "#9aa3af", "#4b5563"
+
+
+def _normalize_body(body: str) -> str:
+    """Strip the block margins and heading sizes QTextDocument adds, so the transcript
+    stylesheet controls the spacing."""
+    return _LARGE_FONT_RE.sub("", _STYLE_NOISE_RE.sub("", body))
 
 
 def _markdown_html(text: str) -> str:
@@ -65,7 +97,38 @@ def _markdown_html(text: str) -> str:
         return html.escape(text).replace("\n", "<br>")
     match = _BODY_RE.search(doc.toHtml())
     body = match.group(1) if match else html.escape(text).replace("\n", "<br>")
-    return body.replace("<!--StartFragment-->", "").replace("<!--EndFragment-->", "")
+    body = body.replace("<!--StartFragment-->", "").replace("<!--EndFragment-->", "")
+    return _normalize_body(body)
+
+
+def _card_html(label: str, label_color: str, body: str,
+               background: str, accent: str) -> str:
+    """One chat bubble: a full-width block with a coloured spine and the speaker's name."""
+    return (f"<div style='background-color:{background}; border-left:3px solid {accent};"
+            f" padding:7px 9px; margin:7px 0 0 0;'>"
+            f"<p style='margin:0 0 3px 0; color:{label_color}; font-size:8.5pt;'>"
+            f"{label}</p>{body}</div>")
+
+
+def _note_html(text: str, color: str) -> str:
+    """A system line (a warning, a status note): no bubble, just quiet text."""
+    body = html.escape(text).replace("\n", "<br>")
+    return (f"<p style='margin:5px 0 0 0; color:{color}; font-size:9pt;'>{body}</p>")
+
+
+def _display_result(result: str) -> str:
+    """A tool result as shown in the transcript: pretty JSON when it is JSON, cut short."""
+    text = str(result)
+    if len(text) > 8000:              # don't pretty-print a huge payload only to cut it
+        text = text[:8000]
+    try:
+        text = json.dumps(json.loads(text), ensure_ascii=False, indent=2)
+    except (TypeError, ValueError):
+        pass
+    limit = 3000
+    if len(text) > limit:
+        text = text[:limit].rstrip() + "\n…（显示已截断；完整结果已发送给模型）"
+    return text
 
 
 class SettingsDialog(QDialog):
@@ -374,6 +437,8 @@ class AssistantDock(QDockWidget):
         self.view = QTextBrowser(host)
         self.view.setReadOnly(True)
         self.view.setOpenLinks(False)
+        self.view.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.view.document().setDocumentMargin(2)
         self.view.anchorClicked.connect(self._anchor_clicked)
         self.view.setPlaceholderText("在这里与 AI 助手对话。它可以读取板卡、修改仿真设置、"
                                      "运行 DC/噪声求解并导出报告。")
@@ -520,20 +585,68 @@ class AssistantDock(QDockWidget):
                         if isinstance(history, list) else [])
         items = data.get("items")
         if isinstance(items, list):
+            pending_tool = None
             for raw in items:
                 if not isinstance(raw, dict):
                     continue
                 if raw.get("kind") == "thinking":
+                    pending_tool = None
                     text = str(raw.get("text") or "").strip()
                     if text:
                         self._items.append({"kind": "thinking", "text": text,
                                             "expanded": bool(raw.get("expanded"))})
                     continue
+                if raw.get("kind") == "tools":
+                    pending_tool = None
+                    calls = []
+                    for call in raw.get("calls") or []:
+                        if not isinstance(call, dict):
+                            continue
+                        calls.append({"name": str(call.get("name") or ""),
+                                      "arguments": call.get("arguments", ""),
+                                      "result": call.get("result")})
+                    if calls:
+                        self._items.append({"kind": "tools", "calls": calls,
+                                            "expanded": bool(raw.get("expanded"))})
+                    continue
                 text = str(raw.get("text") or "")
-                if text:
-                    self._items.append(self._message_item(
-                        str(raw.get("speaker") or ""), text,
-                        str(raw.get("color") or ""), bool(raw.get("markdown"))))
+                if not text:
+                    continue
+                speaker = str(raw.get("speaker") or "")
+                color = str(raw.get("color") or "")
+                if not speaker and text.startswith("📎 "):
+                    # An older attachment note; the paperclip has no glyph in the UI font.
+                    text = "附件：" + text[2:]
+                # Conversations saved before the tool block existed kept every call
+                # and its raw result as ordinary grey messages; fold them into one.
+                if not speaker and color == "#777" and text.startswith("🔧 "):
+                    rest = text[2:].strip()
+                    name, _, arguments = rest.partition(" ")
+                    pending_tool = {
+                        "kind": "tools",
+                        "calls": [{"name": name.strip(),
+                                   "arguments": arguments.strip(), "result": None}],
+                        "expanded": False}
+                    self._items.append(pending_tool)
+                    continue
+                if pending_tool is not None and not speaker and color == "#555":
+                    pending_tool["calls"][-1]["result"] = text
+                    pending_tool = None
+                    continue
+                pending_tool = None
+                self._items.append(self._message_item(
+                    speaker, text, color, bool(raw.get("markdown"))))
+            # One block for neighbouring tool calls, as the turn that made them had.
+            merged: List[dict] = []
+            for item in self._items:
+                if (item.get("kind") == "tools" and merged
+                        and merged[-1].get("kind") == "tools"):
+                    merged[-1]["calls"].extend(item["calls"])
+                    merged[-1]["expanded"] = (merged[-1]["expanded"]
+                                              or item["expanded"])
+                else:
+                    merged.append(item)
+            self._items = merged
         saved = data.get("attachments")
         if isinstance(saved, list):
             for raw in saved:
@@ -557,7 +670,7 @@ class AssistantDock(QDockWidget):
     def _message_item(self, speaker: str, text: str, color: str,
                       markdown: bool) -> dict:
         body = _markdown_html(text) if markdown else \
-            f"<p style='margin:6px 0'>{html.escape(text).replace(chr(10), '<br>')}</p>"
+            f"<p style='margin:0'>{html.escape(text).replace(chr(10), '<br>')}</p>"
         return {"kind": "message", "speaker": speaker, "text": text,
                 "color": color, "markdown": markdown, "html": body}
 
@@ -571,8 +684,20 @@ class AssistantDock(QDockWidget):
             return
         items = []
         for item in self._items:
-            if item.get("kind") == "thinking":
+            kind = item.get("kind")
+            if kind == "thinking":
                 items.append({"kind": "thinking", "text": item.get("text", ""),
+                              "expanded": bool(item.get("expanded"))})
+            elif kind == "tools":
+                calls = []
+                for call in item.get("calls") or []:
+                    result = call.get("result")
+                    if isinstance(result, str) and len(result) > 8000:
+                        result = result[:8000]
+                    calls.append({"name": call.get("name", ""),
+                                  "arguments": call.get("arguments", ""),
+                                  "result": result})
+                items.append({"kind": "tools", "calls": calls,
                               "expanded": bool(item.get("expanded"))})
             else:
                 items.append({"kind": "message", "speaker": item.get("speaker", ""),
@@ -583,7 +708,7 @@ class AssistantDock(QDockWidget):
              "full_text": a.full_text, "pages": [[p, t] for p, t in a.pages]}
             for a in self._attachments.values()
         ]
-        self.store.save({"version": 1, "project": self._project_info,
+        self.store.save({"version": 2, "project": self._project_info,
                          "history": self.history, "items": items,
                          "attachments": attachments})
 
@@ -631,7 +756,7 @@ class AssistantDock(QDockWidget):
         names = "、".join(f"{a.name}（{a.note}）" for a in self._pending_attachments)
         if len(names) > 300:
             names = names[:300] + "…"
-        self.lbl_attach.setText(f"📎 待发送：{names}")
+        self.lbl_attach.setText(f"待发送附件：{names}")
         self.lbl_attach.show()
 
     def _compose_user_content(self, text: str, attachments: List[Attachment]) -> str:
@@ -660,15 +785,13 @@ class AssistantDock(QDockWidget):
         self._schedule_save()
 
     def _message_html(self, item: dict) -> str:
-        label = f"<b>{html.escape(item['speaker'])}：</b>" if item["speaker"] else ""
-        if item["markdown"]:
-            prefix = f"<p style='margin:6px 0 0 0'>{label}</p>" if label else ""
-            inner = prefix + item["html"]
-        else:
-            inner = label + item["html"]
-        if item["color"]:
-            return f"<div style='color:{item['color']}'>{inner}</div>"
-        return inner
+        speaker = item.get("speaker", "")
+        if speaker == "你":
+            return _card_html("你", _USER_LABEL, item["html"], _USER_BG, _USER_ACCENT)
+        if speaker == "助手":
+            return _card_html("助手", _ASSISTANT_LABEL, item["html"],
+                              _ASSISTANT_BG, _ASSISTANT_ACCENT)
+        return _note_html(item.get("text", ""), item.get("color") or "#8a8f98")
 
     def _append_thinking(self, text: str) -> None:
         text = (text or "").strip()
@@ -678,16 +801,57 @@ class AssistantDock(QDockWidget):
         self._render(scroll_to_bottom=True)
         self._schedule_save()
 
+    def _append_tools(self, calls) -> dict:
+        """One collapsible block for every tool the assistant asked for in this turn."""
+        item = {"kind": "tools",
+                "calls": [{"name": call.name, "arguments": call.arguments,
+                           "result": None} for call in calls],
+                "expanded": False}
+        self._items.append(item)
+        self._render(scroll_to_bottom=True)
+        self._schedule_save()
+        return item
+
     def _thinking_html(self, index: int, item: dict) -> str:
-        arrow = "▼" if item["expanded"] else "▶"
+        arrow = "▼" if item["expanded"] else "›"
         label = f"{arrow} 思考过程"
         if not item["expanded"]:
             label += f"（{len(item['text'])} 字）"
-        link = f"<a href='kipi-thinking:{index}' style='color:#777;'>{html.escape(label)}</a>"
-        parts = [f"<p style='margin:6px 0 0 0'>{link}</p>"]
+        link = (f"<a href='kipi-thinking:{index}' style='color:#6b7280;'>"
+                f"{html.escape(label)}</a>")
+        parts = [f"<p style='margin:6px 0 0 10px; font-size:9pt;'>{link}</p>"]
         if item["expanded"]:
             body = html.escape(item["text"]).replace("\n", "<br>")
-            parts.append(f"<p style='margin:2px 0 8px 16px; color:#666;'>{body}</p>")
+            parts.append(f"<p style='margin:3px 0 0 20px; color:#6b7280; "
+                         f"font-size:9pt;'>{body}</p>")
+        return "".join(parts)
+
+    def _tools_html(self, index: int, item: dict) -> str:
+        calls = item.get("calls") or []
+        names = "、".join(str(call.get("name") or "") for call in calls)
+        title = (f"工具调用 {len(calls)} 次 · {names}" if len(calls) > 1
+                 else f"工具调用 · {names}")
+        arrow = "▼" if item.get("expanded") else "›"
+        link = (f"<a href='kipi-tools:{index}' style='color:#6b7280;'>"
+                f"{arrow} {html.escape(title)}</a>")
+        parts = [f"<p style='margin:6px 0 0 10px; font-size:9pt;'>{link}</p>"]
+        if not item.get("expanded"):
+            return "".join(parts)
+        for call in calls:
+            name = html.escape(str(call.get("name") or ""))
+            arguments = call.get("arguments")
+            shown = arguments if isinstance(arguments, str) else \
+                json.dumps(arguments, ensure_ascii=False)
+            shown = " ".join(str(shown).split())
+            if len(shown) > 300:
+                shown = shown[:300] + "…"
+            parts.append(f"<p style='margin:6px 0 0 0; font-size:9pt;'>"
+                         f"<b>{name}</b> <span style='color:#8a8f98;'>"
+                         f"{html.escape(shown)}</span></p>")
+            result = call.get("result")
+            body = "（执行中…）" if result is None else _display_result(result)
+            parts.append(f"<pre style='margin:3px 0 0 0; padding:0; font-size:9pt;'>"
+                         f"{html.escape(body)}</pre>")
         return "".join(parts)
 
     def _render(self, scroll_to_bottom: bool = True) -> None:
@@ -698,11 +862,16 @@ class AssistantDock(QDockWidget):
             return
         blocks: List[str] = []
         for index, item in enumerate(self._items):
-            if item["kind"] == "thinking":
+            kind = item["kind"]
+            if kind == "thinking":
                 blocks.append(self._thinking_html(index, item))
-                continue
-            blocks.append(self._message_html(item))
-        self.view.setHtml("".join(blocks))
+            elif kind == "tools":
+                blocks.append(self._tools_html(index, item))
+            else:
+                blocks.append(self._message_html(item))
+        document = (f"<html><head><style>{_CHAT_CSS}</style></head><body>"
+                    f"{''.join(blocks)}</body></html>")
+        self.view.setHtml(document)
         if scroll_to_bottom or at_bottom:
             bar.setValue(bar.maximum())
         else:
@@ -710,7 +879,9 @@ class AssistantDock(QDockWidget):
 
     def _anchor_clicked(self, url: QUrl) -> None:
         target = url.toString()
-        if target.startswith("kipi-thinking:"):
+        for prefix, kind in (("kipi-thinking:", "thinking"), ("kipi-tools:", "tools")):
+            if not target.startswith(prefix):
+                continue
             try:
                 index = int(target.split(":", 1)[1])
             except ValueError:
@@ -718,8 +889,8 @@ class AssistantDock(QDockWidget):
             if not 0 <= index < len(self._items):
                 return
             item = self._items[index]
-            if item.get("kind") == "thinking":
-                item["expanded"] = not item["expanded"]
+            if item.get("kind") == kind:
+                item["expanded"] = not item.get("expanded")
                 self._render(scroll_to_bottom=False)
                 self._schedule_save()
             return
@@ -778,7 +949,7 @@ class AssistantDock(QDockWidget):
         self.runner.attachments = self._attachments
         self._append("你", text or "（请阅读附件）", "#1f5fa8")
         if attachments:
-            self._append("", "📎 " + "、".join(f"{a.name}（{a.note}）"
+            self._append("", "附件：" + "、".join(f"{a.name}（{a.note}）"
                                                for a in attachments), "#777")
         self.history.append({"role": "user",
                              "content": self._compose_user_content(text, attachments)})
@@ -836,17 +1007,15 @@ class AssistantDock(QDockWidget):
             "tool_calls": [{"id": tc.id, "name": tc.name, "arguments": tc.arguments}
                            for tc in turn.tool_calls],
         })
-        for call in turn.tool_calls:
-            shown = json.dumps(call.arguments, ensure_ascii=False)
-            if len(shown) > 240:
-                shown = shown[:240] + "…"
-            self._append("", f"🔧 {call.name} {shown}", "#777")
+        tool_item = self._append_tools(turn.tool_calls)
+        for index, call in enumerate(turn.tool_calls):
             self.status.setText(f"执行 {call.name}…")
             result = self.runner.run(call.name, call.arguments)
             self.history.append({"role": "tool", "tool_call_id": call.id,
                                  "name": call.name, "content": result})
-            brief = result if len(result) <= 600 else result[:600] + "…"
-            self._append("", brief, "#555")
+            tool_item["calls"][index]["result"] = result
+            self._render(scroll_to_bottom=False)
+            self._schedule_save()
         self._next()
 
     def _finish(self, message: str) -> None:

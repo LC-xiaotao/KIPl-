@@ -4,6 +4,12 @@ All notable changes to KiPI, newest first. Each minor version is one development
 The code's version number went from 0.1.0 straight to 0.5.0, so 0.2.0 to 0.4.0 name
 milestones rather than versions that were ever set.
 
+## 2026-11-11 更新
+
+### 新增
+
+- **嘉立创EDA专业版 `.epro2` 原生导入**：KiPI 独立版可直接打开 EasyEDA Pro 的 `.epro2` 工程归档，读取叠层、网络、走线、过孔、焊盘、元件和铺铜，无需先导出 ODB++。支持追加日志重放与 `PAD_NET` 网络映射；介电常数缺失时使用 KiPI 默认值，盲埋孔按通孔处理。`.eprj3` 文件夹和 `.eprj2` 数据库暂不读取。
+
 ## 2026-11-09 至 2026-11-10 更新
 
 本仓库面向嘉立创EDA专业版完成了一轮集中开发，主要更新如下；逐项技术细节见下方 1.0.0 条目。
@@ -33,6 +39,7 @@ milestones rather than versions that were ever set.
 - **波形与阻抗视图支持缩放**：Coupled Noise 的 **Waveforms** 和 AC 的 **Impedance** 视图新增导航工具栏，支持平移、框选缩放、复位和保存图片；波形图还支持滚轮缩放、Shift+滚轮调整纵轴、双击复位。
 - **工具调用中断**：达到轮次上限不再直接终止，改为暂停并显示“继续”，保留完整上下文。
 - **Markdown 未渲染**：助手回复按 Markdown 显示；工具 JSON 和思考内容仍保持纯文本，避免被改写。
+- **AI 助手对话排版**：用户问题与助手回复改为独立卡片；思考过程和工具调用收进默认折叠的条目，原始 JSON 结果点击后才展开；统一 Markdown 标题、列表、表格和代码块的字号与间距，旧对话在恢复时自动整理。
 - **DC 精度计算器界面汉化**：补齐计算器标题、反馈基准、上下分压电阻、漏电流、最小/最大输出和说明文字的中文词条；带 VRM 名称的标题也会翻译。
 - **附件与对话**：附件只在本地提取文字后随消息发送，文件本身不上传；切换板卡时正在进行的请求会中止，避免写入错误工程。
 

@@ -22,6 +22,7 @@ FORMAT_NAMES: Dict[str, str] = {
     "kicad-pcb": "KiCad board file",
     "odbpp": "ODB++",
     "easyeda-odb": "EasyEDA Pro (ODB++)",
+    "easyeda-epro2": "EasyEDA Pro (epro2)",
     "hyp": "HyperLynx",
 }
 
