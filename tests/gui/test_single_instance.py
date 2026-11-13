@@ -90,3 +90,43 @@ def test_second_instance_brings_the_first_to_the_front(app, isolated):
 
 def test_activation_fails_cleanly_with_nobody_listening(app, isolated):
     assert si.activate_running(timeout_ms=500) is False
+
+
+@pytest.mark.parametrize("has_splash", [True, False])
+def test_repeated_launch_during_preload_then_after_window_opens(app, monkeypatch, has_splash):
+    from types import SimpleNamespace
+    from kipi.gui import app as gui_app, identity
+
+    splash = object() if has_splash else None
+    window = object()
+    activated = []
+    callbacks = []
+    released = []
+    monkeypatch.setattr(si, "bring_to_front", activated.append)
+    monkeypatch.setattr(identity, "tag_window", lambda win: None)
+    monkeypatch.setattr(gui_app, "set_status", lambda *args: None)
+    monkeypatch.setitem(sys.modules, "kipi.gui.main_window",
+                        SimpleNamespace(MainWindow=lambda **kwargs: window))
+
+    def preload(_splash):
+        # The second click must already have a listener while cold imports run.
+        assert len(callbacks) == 1
+        callbacks[0]()
+        assert activated == ([splash] if has_splash else [])
+
+    def event_loop():
+        callbacks[0]()
+        assert activated[-1] is window
+        return 0
+
+    monkeypatch.setattr(gui_app, "preload", preload)
+    monkeypatch.setattr(identity, "make_app", lambda: SimpleNamespace(exec=event_loop))
+    guard = SimpleNamespace(listen=callbacks.append, release=lambda: released.append(True))
+    # A minimal splash exercises activation without starting its animation timer.
+    if has_splash:
+        class Welcome:
+            def isVisible(self):
+                return False
+        splash = Welcome()
+    assert gui_app.run(instance=guard, splash=splash) == 0
+    assert len(callbacks) == 1 and released == [True]

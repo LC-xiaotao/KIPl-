@@ -1,25 +1,32 @@
-<p align="center">
-  <img src="resources/kipi.gif" alt="KiPI logo" width="128">
-</p>
+# KiPI 电源完整性仿真工具
 
-# KiPI — 电源完整性仿真器（独立版 / KiCad 插件 / 嘉立创EDA专业版）
+KiPI 是一款面向 PCB 设计的开源电源完整性分析工具，支持独立运行、KiCad 插件以及嘉立创 EDA 专业版工程导入，帮助工程师在设计阶段评估供电质量、定位薄弱环节，为布局布线和电源网络优化提供依据。
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![KiCad 9.0.3+](https://img.shields.io/badge/KiCad-9.0.3%2B-314cb0.svg?logo=kicad&logoColor=white)](#安装与运行)
-[![Platform: Windows | Linux | macOS](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#安装与运行)
-[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776ab.svg?logo=python&logoColor=white)](#安装与运行)
+本项目基于 [Drew Maatman 的 KiPI](https://github.com/drewsum/KiPI) 开发，采用 [GPL v3](LICENSE) 开源许可证，适用于 PCB 电源设计验证、方案比较、教学研究与二次开发。
 
-**第一次接触电源完整性？先看 [求解器指南](docs/solver-guide.html)：它介绍了什么是 PI、为什么重要，以及 KiPI 的网格、DC、热、AC 和耦合噪声求解器如何工作。**
+### 在原项目的基础下新增了以下功能
 
-KiPI 是一款电源完整性分析工具，支持三种运行方式：独立运行、作为 KiCad 9/10 的 IPC 插件，或配合 **嘉立创EDA专业版（EasyEDA Pro）** 通过 ODB++ 导出使用。包含三种分析模式：
+#### 一、新增部分EDA源文件格式导入
 
-* **DC：压降与电流密度。** 定义 VRM、负载（引脚电流）和串联器件（磁珠、电阻、负载开关），逐网络、逐铜层计算压降；在可旋转的 3D 视图中查看电压、电流密度、过孔电流、铜损和（可选的）板温，并对负载、VRM、过孔和温度做 PASS/FAIL 判定，导出交互式 HTML 或 PDF 报告。
-* **AC：PDN 阻抗。** 为去耦电容建立 RLC 模型，在器件电源引脚放置探针，在频域扫描电源分配网络（平面、过孔、安装孔和电容）的阻抗；对照平坦或自定义目标阻抗检查，并可根据负载瞬态指标计算目标阻抗。
-* **耦合噪声：开关电源对信号网络的串扰。** 把 buck/boost 电源当作干扰源，KiPI 根据布局构建开关节点、电感和电容的纹波波形，计算它们通过电容、互感与共地耦合到指定受害网络上的噪声；按逻辑电平的噪声容限检查接收端（高电平和低电平两种状态），并在 3D 视图中显示噪声耦合位置。
 
-第一次使用？**[用户指南](docs/help.html)**（KiPI 内的 **Help** 按钮或 **F1**）逐步介绍每个按钮、工作流和结果含义。KiPI 中每个控件都有工具提示。
+| 软件 | 格式 | 项目状态 |
+|-------|-------| -------|
+|嘉立创EDA专业版 | .epro2格式 | 已完成 |
+| Altium | .PcbDoc | 开发中 |
+|PADS VX2.4 | .PCB | 未支持 |
+| allegro | .BRD | 未支持 |
 
-![Current density with flow arrows through the +12V input path and the U201 eFuse, with the Series links table](docs/images/current_density.png)
+### 二、 AI 仿真助手
+- 用自然语言读取板卡、配置 VRM/负载/探针、运行 DC/AC/噪声分析及导出报告；支持多家模型服务和自定义接口
+- 	按工程保存对话，支持 Markdown、思考过程折叠、继续执行；可读取 PDF、Word、Excel 等附件，并搜索长附件全文
+- 	新增快速模式，通过降低网格和扫频精度加快初步分析；助手还可配置电热分析参数、读取温升结果
+### 三、中文界面与报告
+新增简体中文界面、中文 HTML/PDF 报告，支持跟随系统语言及运行时中英文切换
+### 四、图表和窗口操作
+增强波形、阻抗图的缩放和平移，改善窄窗口布局，修复中文环境下的部分 3D 黑屏问题
+
+### 五、支持嘉立创EDA专业版扩展
+可将当前 PCB 一键导入到软件中
 
 **状态：1.0.0（稳定版）**（[更新日志](docs/CHANGELOG.md)）。原项目地址：<https://github.com/drewsum/KiPI>。
 

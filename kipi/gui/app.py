@@ -321,13 +321,29 @@ def run(source=None, tool=None, snapshot=None, instance=None, splash=False) -> i
     else:
         from kipi.gui.identity import make_app
         app = make_app()
+    from kipi.gui.single_instance import bring_to_front
+
+    # Cold imports can take minutes. Answer repeated launches while the splash is
+    # showing, rather than leaving the lock owner unreachable until MainWindow exists.
+    activation_target = [splash]
+
+    def activate():
+        target = activation_target[0]
+        if target is not None:
+            try:
+                bring_to_front(target)
+            except RuntimeError:  # the user may have dismissed the splash
+                pass
+
+    if instance is not None:
+        instance.listen(activate)
     preload(splash)
     set_status(splash, "Opening the window…")
     from kipi.gui.identity import tag_window
     from kipi.gui.main_window import MainWindow
-    from kipi.gui.single_instance import bring_to_front
 
     win = MainWindow(source=source, tool=tool, snapshot=snapshot)
+    activation_target[0] = win
     bring_to_front(win)     # shows it; it opens behind KiCad otherwise (#112)
     tag_window(win)
     log.info("Window open %.1f s after KiPI started", time.monotonic() - STARTED)
@@ -338,8 +354,6 @@ def run(source=None, tool=None, snapshot=None, instance=None, splash=False) -> i
         # KiPI unless the user went elsewhere meanwhile.
         splash.closed.connect(lambda: _refocus(app, win))
         splash.release()    # closes it now if it has played through, as KiPI was slow
-    if instance is not None:
-        instance.listen(lambda: bring_to_front(win))
     code = app.exec()
     if instance is not None:
         instance.release()
