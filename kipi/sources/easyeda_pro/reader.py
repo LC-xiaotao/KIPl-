@@ -343,7 +343,6 @@ def _read_footprints(pcb: Document, docs: Dict[str, Document], layers: LayerTabl
     net_by_pad = _pad_net_map(pcb)
     pads: List[Pad] = []
     footprints: List[Footprint] = []
-    bottom = 0
 
     for record in pcb.of_type("COMPONENT"):
         component_id = _record_id(record)
@@ -352,8 +351,6 @@ def _read_footprints(pcb: Document, docs: Dict[str, Document], layers: LayerTabl
         footprint_uuid = values.get("Footprint") or ""
         doc = docs.get(str(footprint_uuid))
         side = "bottom" if int(_number(record.get("layerId"), 1)) == 2 else "top"
-        if side == "bottom":
-            bottom += 1
         value = (values.get("Value") or values.get("Name")
                  or str((record.get("attrs") or {}).get("Name") or ""))
         position = to_point(_number(record.get("x", record.get("positionX"))),
@@ -368,10 +365,12 @@ def _read_footprints(pcb: Document, docs: Dict[str, Document], layers: LayerTabl
             progress.warn(f"Footprint {footprint_uuid} for {reference or component_id} "
                           "is missing from the project")
         else:
+            canvas = next(iter(doc.of_type("CANVAS")), {})
+            origin = (_number(canvas.get("originX")), _number(canvas.get("originY")))
             for pad_record in doc.of_type("PAD"):
                 pad = _read_footprint_pad(
                     pad_record, record, component_id, reference, side, layers, units,
-                    max_error, net_by_pad)
+                    max_error, net_by_pad, origin)
                 if pad is not None:
                     pads.append(pad)
                     pad_ids.append(pad.id)
@@ -380,15 +379,13 @@ def _read_footprints(pcb: Document, docs: Dict[str, Document], layers: LayerTabl
             id=component_id, reference=reference, value=value, position=position,
             side=side, pad_ids=pad_ids, footprint=lib_name, angle_deg=angle))
 
-    if bottom:
-        _note(assumed, "EasyEDA Pro: bottom-side parts are mirrored with a best-effort "
-                       "rule until checked against a bottom-heavy project.")
     return pads, footprints
 
 
 def _read_footprint_pad(pad: dict, component: dict, component_id: str, reference: str,
                         side: str, layers: LayerTable, units: Units, max_error: float,
-                        net_by_pad: Dict[Tuple[str, str], str]) -> Optional[Pad]:
+                        net_by_pad: Dict[Tuple[str, str], str],
+                        origin: Tuple[float, float] = (0.0, 0.0)) -> Optional[Pad]:
     raw_id = _record_id(pad)
     number = str(pad.get("num") or "")
     local_id = raw_id or number or "pad"
@@ -408,7 +405,7 @@ def _read_footprint_pad(pad: dict, component: dict, component_id: str, reference
         if not rings:
             continue
         rings = pad_rings_in_footprint(pad, rings, absolute)
-        placed = place_in_component(rings, component, side, units)
+        placed = place_in_component(rings, component, side, units, origin)
         # place_in_component() already returns KiPI millimetres; only reject degenerate
         # rings here (converting again would shrink the pad by the unit factor).
         polys = [Poly(outline=ring) for ring in placed if len(ring) >= 3]
@@ -422,7 +419,7 @@ def _read_footprint_pad(pad: dict, component: dict, component_id: str, reference
         position = shape_layers and _first_point(shape_layers) or (0.0, 0.0)
     else:
         moved = place_in_component([[(float(center[0]), float(center[1]))]],
-                                   component, side, units)
+                                   component, side, units, origin)
         position = moved[0][0] if moved and moved[0] else (0.0, 0.0)
     return Pad(
         id=f"{component_id}{local_id}",

@@ -141,6 +141,79 @@ def test_assistant_markdown_is_rendered():
     assert "*b*" in dock.view.toPlainText()
 
 
+def test_reply_timestamp_and_collapse_survive_reopening(tmp_path, monkeypatch):
+    from datetime import datetime
+    from kipi.gui.assistant.panel import AssistantDock
+    from kipi.gui.assistant.store import ConversationStore
+
+    store = ConversationStore(tmp_path)
+    dock = AssistantDock(_Main(), store=store)
+    dock.config = Config(provider="DeepSeek", api_key="k")
+    monkeypatch.setattr(dock.client, "send", lambda *args: dock.client.done.emit(
+        {"choices": [{"message": {"content": "带时间的答复"}}]}, ""))
+    dock.input.setPlainText("问题正文")
+    dock._send()
+    index = next(i for i, item in enumerate(dock._items) if item.get("speaker") == "助手")
+    timestamp = dock._items[index]["timestamp"]
+    datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+    assert timestamp in dock.view.toPlainText()
+    dock._anchor_clicked(QUrl(f"kipi-message:{index}"))
+    assert "带时间的答复" not in dock.view.toPlainText()
+    assert timestamp in dock.view.toPlainText()
+    dock.save_conversation()
+
+    reopened = AssistantDock(_Main(), store=store)
+    assert reopened._items[index]["timestamp"] == timestamp
+    assert not reopened._items[index]["expanded"]
+    assert "带时间的答复" not in reopened.view.toPlainText()
+    reopened._anchor_clicked(QUrl(f"kipi-message:{index}"))
+    assert "带时间的答复" in reopened.view.toPlainText()
+    assert reopened.history == dock.history
+
+
+def test_all_information_can_be_folded_and_restored():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    dock._append("你", "发送内容")
+    dock._append("助手", "**回复内容**", markdown=True)
+    dock._append("", "附件详细信息", "#777")
+    dock._append_thinking("推理详细信息")
+    turn = parse_response(Config(provider="DeepSeek"), {"choices": [{"message": {
+        "tool_calls": [{"id": "c1", "type": "function", "function": {
+            "name": "get_context", "arguments": "{}"}}]}}]})
+    tool = dock._append_tools(turn.tool_calls)
+    tool["calls"][0]["result"] = "工具结果详细信息"
+    dock._set_suggestions(["下一步内容"])
+    assert not dock._items[-1]["expanded"] and not dock._items[-2]["expanded"]
+    details = ("发送内容", "回复内容", "附件详细信息", "推理详细信息", "工具结果详细信息")
+
+    dock.btn_expand_all.click()
+    assert all(s in dock.view.toPlainText() for s in details)
+    assert not dock.suggestion_list.isHidden()
+    dock.btn_collapse_all.click()
+    assert all(s not in dock.view.toPlainText() for s in details)
+    assert dock.suggestion_list.isHidden()
+    dock._anchor_clicked(QUrl("kipi-message:0"))
+    assert "发送内容" in dock.view.toPlainText()
+    assert "回复内容" not in dock.view.toPlainText()
+    dock.btn_expand_all.click()
+    assert all(s in dock.view.toPlainText() for s in details)
+
+
+def test_legacy_messages_keep_unknown_time_when_loaded(tmp_path):
+    from kipi.gui.assistant.panel import AssistantDock
+    from kipi.gui.assistant.store import ConversationStore
+
+    dock = AssistantDock(_Main(), store=ConversationStore(tmp_path))
+    dock.store.save({"version": 3, "items": [{
+        "kind": "message", "speaker": "助手", "text": "旧回复", "markdown": False,
+    }]})
+    dock._load_conversation()
+    assert dock._items[-1]["timestamp"] == ""
+    assert "旧回复" in dock.view.toPlainText()
+
+
 def test_the_chat_folds_reasoning_until_clicked(monkeypatch):
     from kipi.gui.assistant.panel import AssistantDock
 

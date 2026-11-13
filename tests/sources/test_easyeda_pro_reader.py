@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import zipfile
 from pathlib import Path
 
@@ -229,3 +230,58 @@ def test_poured_scale():
     # 0.01-inch units. Both must land on the same rectangle.
     assert Polygon(vin.filled[3][0].outline).bounds == pytest.approx(
         (2.54, -17.78, 10.16, -15.24), abs=1e-3)
+
+
+@pytest.mark.parametrize("angle,top_center,bottom_center", [
+    (0, (220, 330), (220, 270)), (90, (170, 320), (230, 320)),
+    (180, (180, 270), (180, 330)), (270, (230, 280), (170, 280)),
+])
+@pytest.mark.parametrize("origin", [(0, 0), (40, -50)])
+@pytest.mark.parametrize("side", ["top", "bottom"])
+def test_placed_pad_connects_to_board_copper(
+        tmp_path, angle, top_center, bottom_center, origin, side):
+    """Respect the footprint origin and mirror local Y before bottom rotation."""
+    from kipi.core.geometry.copper import net_layer_copper
+    from kipi.core.model.layers import B_CU, F_CU
+
+    def record(kind, rid, body):
+        return (json.dumps({"type": kind, "id": rid, "ticket": 1}) + "||"
+                + json.dumps(body) + "|\n")
+
+    x, y = bottom_center if side == "bottom" else top_center
+    source_layer = 2 if side == "bottom" else 1
+    copper_layer = B_CU if side == "bottom" else F_CU
+    stream = "".join([
+        record("DOCHEAD", "fp", {"docType": "FOOTPRINT", "uuid": "fp"}),
+        record("CANVAS", "CANVAS", {"originX": origin[0], "originY": origin[1]}),
+        record("PAD", "p1", {
+            "num": "1", "layerId": 1,
+            "centerX": 20 + origin[0], "centerY": 30 + origin[1],
+            "padAngle": 30,
+            "defaultPad": {"padType": "RECT", "width": 10, "height": 20},
+        }),
+        record("DOCHEAD", "pcb", {"docType": "PCB", "uuid": "pcb"}),
+        record("LAYER", "top", {"layerId": 1, "layerType": "TOP"}),
+        record("LAYER", "bottom", {"layerId": 2, "layerType": "BOTTOM"}),
+        record("COMPONENT", "c1", {
+            "layerId": source_layer, "x": 200, "y": 300, "angle": angle,
+        }),
+        record("ATTR", "fpattr", {
+            "parentId": "c1", "key": "Footprint", "value": "fp",
+        }),
+        record("PAD_NET", '["PAD_NET","c1","1","p1"]', {"padNet": "VCC"}),
+        record("LINE", "wire", {
+            "netName": "VCC", "layerId": source_layer, "width": 4,
+            "startX": x, "startY": y, "endX": x + 50, "endY": y,
+        }),
+    ])
+    path = tmp_path / "placed.epro2"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("project2.json", '{"editorVersion":"4.1.99"}')
+        archive.writestr("placed.epru", stream)
+    board = read_board(path)
+    pad = board.pads[0]
+    assert pad.position == pytest.approx((x * 0.0254, -y * 0.0254), abs=1e-6)
+    assert pad.net == "VCC" and pad.shapes.keys() == {copper_layer}
+    # Displaced pads become separate copper islands, and cannot draw current.
+    assert net_layer_copper(board, "VCC", copper_layer).geom_type == "Polygon"

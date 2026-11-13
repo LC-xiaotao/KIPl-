@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -193,10 +194,16 @@ def _markdown_html(text: str) -> str:
 def _card_html(label: str, label_color: str, body: str,
                background: str, accent: str) -> str:
     """One chat bubble: a full-width block with a coloured spine and the speaker's name."""
-    return (f"<div style='background-color:{background}; border-left:3px solid {accent};"
-            f" padding:7px 9px; margin:7px 0 0 0;'>"
+    # QTextDocument does not paint div backgrounds/padding reliably. Table cells
+    # provide a real frame that also contains lists, code and nested markdown tables.
+    return ("<table width='100%' cellspacing='0' cellpadding='0' "
+            "style='margin:7px 0 0 0; border:0;'>"
+            f"<tr><td width='3' bgcolor='{accent}' "
+            "style='border:0; padding:0;'></td>"
+            f"<td bgcolor='{background}' "
+            "style='border:0; padding:7px 9px; color:#222;'>"
             f"<p style='margin:0 0 3px 0; color:{label_color}; font-size:8.5pt;'>"
-            f"{label}</p>{body}</div>")
+            f"{label}</p>{body}</td></tr></table>")
 
 
 def _note_html(text: str, color: str) -> str:
@@ -553,6 +560,16 @@ class AssistantDock(QDockWidget):
         top.addLayout(button_row)
         lay.addLayout(top)
 
+        fold_row = QHBoxLayout()
+        self.btn_collapse_all = QPushButton("全部折叠", host)
+        self.btn_expand_all = QPushButton("全部展开", host)
+        self.btn_collapse_all.clicked.connect(lambda: self._set_all_expanded(False))
+        self.btn_expand_all.clicked.connect(lambda: self._set_all_expanded(True))
+        fold_row.addWidget(self.btn_collapse_all)
+        fold_row.addWidget(self.btn_expand_all)
+        fold_row.addStretch(1)
+        lay.addLayout(fold_row)
+
         self.view = QTextBrowser(host)
         self.view.setReadOnly(True)
         self.view.setOpenLinks(False)
@@ -855,7 +872,9 @@ class AssistantDock(QDockWidget):
                     continue
                 pending_tool = None
                 item = self._message_item(
-                    speaker, text, color, bool(raw.get("markdown")))
+                    speaker, text, color, bool(raw.get("markdown")),
+                    timestamp=str(raw.get("timestamp") or ""))
+                item["expanded"] = bool(raw.get("expanded", True))
                 item["suggestions"] = [
                     str(s) for s in raw.get("suggestions") or [] if str(s).strip()
                 ][:5]
@@ -903,11 +922,14 @@ class AssistantDock(QDockWidget):
             self.status.setText(f"已恢复 {label} 的对话")
 
     def _message_item(self, speaker: str, text: str, color: str,
-                      markdown: bool) -> dict:
+                      markdown: bool, timestamp: Optional[str] = None) -> dict:
         body = _markdown_html(text) if markdown else \
             f"<p style='margin:0'>{html.escape(text).replace(chr(10), '<br>')}</p>"
         return {"kind": "message", "speaker": speaker, "text": text,
-                "color": color, "markdown": markdown, "html": body}
+                "color": color, "markdown": markdown, "html": body,
+                "expanded": True,
+                "timestamp": (datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                              if timestamp is None else timestamp)}
 
     def _schedule_save(self) -> None:
         if self.store is not None and self._project_key:
@@ -951,6 +973,8 @@ class AssistantDock(QDockWidget):
                 items.append({"kind": "message", "speaker": item.get("speaker", ""),
                               "text": item.get("text", ""), "color": item.get("color", ""),
                               "markdown": bool(item.get("markdown")),
+                              "timestamp": item.get("timestamp", ""),
+                              "expanded": bool(item.get("expanded", True)),
                               "suggestions": list(item.get("suggestions") or [])})
         attachments = [
             {"name": a.name, "text": a.text, "note": a.note,
@@ -959,7 +983,7 @@ class AssistantDock(QDockWidget):
              "width": a.width, "height": a.height, "byte_size": a.byte_size}
             for a in self._attachments.values()
         ]
-        self.store.save({"version": 3, "project": self._project_info,
+        self.store.save({"version": 4, "project": self._project_info,
                          "history": self._history_for_store(), "items": items,
                          "attachments": attachments})
 
@@ -1137,14 +1161,32 @@ class AssistantDock(QDockWidget):
         self._render(scroll_to_bottom=True)
         self._schedule_save()
 
-    def _message_html(self, item: dict) -> str:
+    def _message_html(self, item: dict, index: int) -> str:
         speaker = item.get("speaker", "")
+        expanded = item.get("expanded", True)
+        arrow = "▼" if expanded else "›"
+        label = html.escape(speaker or "提示")
+        timestamp = html.escape(str(item.get("timestamp") or ""))
+        header = (f"<a href='kipi-message:{index}'>"
+                  f"{arrow} {label} · {'收起' if expanded else '展开'}</a>")
+        if timestamp:
+            header += f" <span style='color:#6b7280;'>{timestamp}</span>"
+        body = item["html"] if expanded else ""
         if speaker == "你":
-            return _card_html("你", _USER_LABEL, item["html"], _USER_BG, _USER_ACCENT)
+            return _card_html(header, _USER_LABEL, body, _USER_BG, _USER_ACCENT)
         if speaker == "助手":
-            return _card_html("助手", _ASSISTANT_LABEL, item["html"],
+            return _card_html(header, _ASSISTANT_LABEL, body,
                               _ASSISTANT_BG, _ASSISTANT_ACCENT)
-        return _note_html(item.get("text", ""), item.get("color") or "#8a8f98")
+        return (f"<p style='margin:5px 0 0 0; font-size:8.5pt;'>{header}</p>"
+                + (_note_html(item.get("text", ""), item.get("color") or "#8a8f98")
+                   if expanded else ""))
+
+    def _set_all_expanded(self, expanded: bool) -> None:
+        for item in self._items:
+            item["expanded"] = expanded
+        self.btn_suggestions.setChecked(expanded)
+        self._render(scroll_to_bottom=False)
+        self._schedule_save()
 
     def _append_thinking(self, text: str) -> None:
         text = (text or "").strip()
@@ -1221,7 +1263,7 @@ class AssistantDock(QDockWidget):
             elif kind == "tools":
                 blocks.append(self._tools_html(index, item))
             else:
-                blocks.append(self._message_html(item))
+                blocks.append(self._message_html(item, index))
         document = (f"<html><head><style>{_CHAT_CSS}</style></head><body>"
                     f"{''.join(blocks)}</body></html>")
         self.view.setHtml(document)
@@ -1232,7 +1274,8 @@ class AssistantDock(QDockWidget):
 
     def _anchor_clicked(self, url: QUrl) -> None:
         target = url.toString()
-        for prefix, kind in (("kipi-thinking:", "thinking"), ("kipi-tools:", "tools")):
+        for prefix, kind in (("kipi-thinking:", "thinking"), ("kipi-tools:", "tools"),
+                             ("kipi-message:", "message")):
             if not target.startswith(prefix):
                 continue
             try:
@@ -1243,7 +1286,7 @@ class AssistantDock(QDockWidget):
                 return
             item = self._items[index]
             if item.get("kind") == kind:
-                item["expanded"] = not item.get("expanded")
+                item["expanded"] = not item.get("expanded", kind == "message")
                 self._render(scroll_to_bottom=False)
                 self._schedule_save()
             return

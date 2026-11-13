@@ -472,7 +472,8 @@ def pad_rings_in_footprint(pad: dict, rings: Sequence[Sequence[Point]],
 
 
 def place_in_component(rings: Sequence[Sequence[Point]], component: dict,
-                       side: str, units: Units) -> List[List[Point]]:
+                       side: str, units: Units,
+                       origin: Point = (0.0, 0.0)) -> List[List[Point]]:
     """EasyEDA local rings -> KiPI board rings (mm, Y-down), using KiPI's Frame."""
     try:
         cx = float(component.get("x", component.get("positionX")) or 0)
@@ -487,8 +488,13 @@ def place_in_component(rings: Sequence[Sequence[Point]], component: dict,
     for ring in rings:
         placed = []
         for x, y in ring:
-            local_x = -x if side == "bottom" else x
-            placed.append(frame((local_x * units.mm, -y * units.mm)))
+            # Footprint geometry is stored relative to the canvas coordinates;
+            # the component anchor is its declared footprint origin.
+            x, y = x - origin[0], y - origin[1]
+            # Pro flips the footprint's local Y on the bottom, before rotation.
+            # Mirroring X instead exchanges pin positions (even on 2-pad parts).
+            local_y = -y if side == "bottom" else y
+            placed.append(frame((x * units.mm, -local_y * units.mm)))
         out.append(placed)
     return out
 
