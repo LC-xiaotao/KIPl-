@@ -55,6 +55,30 @@ PRESET_MAX_OUTPUT: Dict[str, int] = {
     "自定义": 8192,
 }
 
+#: Providers whose default model accepts images. It is only a starting point for the
+#: settings checkbox: a user can select a vision model anywhere (Qwen-VL, GLM-4V, ...).
+PRESET_VISION: Dict[str, bool] = {
+    "OpenAI": True,
+    "Anthropic": True,
+    "DeepSeek": False,
+    "通义千问": False,
+    "智谱 GLM": False,
+    "Kimi": False,
+    "Gemini": True,
+    "Ollama": False,
+    "自定义": False,
+}
+
+
+def _setting_bool(value: Any, default: bool = False) -> bool:
+    """A QSettings boolean; IniFormat returns "true"/"false" as strings."""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
 #: Best-effort output limits for well-known model families, used when the provider's
 #: model list carries no token limits (OpenAI and Anthropic do not publish them there).
 _OUTPUT_LIMITS = (
@@ -109,6 +133,7 @@ class Config:
     max_tokens: int = DEFAULT_MAX_TOKENS
     temperature: float = DEFAULT_TEMPERATURE
     max_turns: int = DEFAULT_MAX_TURNS
+    vision: bool = False
 
     @property
     def style(self) -> str:
@@ -143,6 +168,9 @@ class Config:
                               DEFAULT_TEMPERATURE),
             max_turns=int(s.value("assistant/max_turns", DEFAULT_MAX_TURNS) or
                           DEFAULT_MAX_TURNS),
+            vision=_setting_bool(s.value("assistant/vision",
+                                         PRESET_VISION.get(provider, False)),
+                                 PRESET_VISION.get(provider, False)),
         )
 
     def save(self, settings: Optional[QSettings] = None) -> None:
@@ -152,7 +180,8 @@ class Config:
                            ("model", self.model), ("api_key", self.api_key),
                            ("max_tokens", self.max_tokens),
                            ("temperature", self.temperature),
-                           ("max_turns", self.max_turns)):
+                           ("max_turns", self.max_turns),
+                           ("vision", bool(self.vision))):
             s.setValue(f"assistant/{key}", value)
         s.sync()
 
@@ -303,6 +332,25 @@ def parse_models(payload: Any) -> List[str]:
     return [info.id for info in parse_model_infos(payload)]
 
 
+def _openai_image_part(image: dict) -> Optional[dict]:
+    data = str(image.get("data") or "")
+    if not data:
+        return None
+    mime = str(image.get("mime") or "image/png")
+    return {"type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{data}"}}
+
+
+def _anthropic_image_part(image: dict) -> Optional[dict]:
+    data = str(image.get("data") or "")
+    if not data:
+        return None
+    return {"type": "image",
+            "source": {"type": "base64",
+                       "media_type": str(image.get("mime") or "image/png"),
+                       "data": data}}
+
+
 def _openai_messages(system: str, history: List[dict]) -> List[dict]:
     out = [{"role": "system", "content": system}] if system else []
     for m in history:
@@ -322,7 +370,19 @@ def _openai_messages(system: str, history: List[dict]) -> List[dict]:
             out.append({"role": "tool", "tool_call_id": m.get("tool_call_id", ""),
                         "content": m.get("content", "")})
         else:
-            out.append({"role": role, "content": m.get("content", "")})
+            content = m.get("content", "")
+            images = m.get("images") if role == "user" else None
+            if images:
+                parts = []
+                text = str(content or "")
+                if text:
+                    parts.append({"type": "text", "text": text})
+                for image in images:
+                    part = _openai_image_part(image)
+                    if part:
+                        parts.append(part)
+                content = parts or text
+            out.append({"role": role, "content": content})
     return out
 
 
@@ -349,7 +409,18 @@ def _anthropic_messages(history: List[dict]) -> List[dict]:
             else:
                 out.append({"role": "user", "content": [block]})
         else:
-            out.append({"role": "user", "content": m.get("content", "")})
+            content = m.get("content", "")
+            if role == "user" and m.get("images"):
+                blocks = []
+                text = str(content or "")
+                if text:
+                    blocks.append({"type": "text", "text": text})
+                for image in m["images"]:
+                    part = _anthropic_image_part(image)
+                    if part:
+                        blocks.append(part)
+                content = blocks or text
+            out.append({"role": "user", "content": content})
     return out
 
 
@@ -499,7 +570,9 @@ class ChatClient(QObject):
         for key, value in headers.items():
             request.setRawHeader(key.encode("utf-8"), value.encode("utf-8"))
         try:
-            request.setTransferTimeout(180_000)
+            has_images = any(m.get("images") for m in history
+                             if isinstance(m, dict))
+            request.setTransferTimeout(300_000 if has_images else 180_000)
         except AttributeError:          # Qt 5 has no per-request timeout
             pass
         data = QByteArray(json.dumps(body, ensure_ascii=False).encode("utf-8"))

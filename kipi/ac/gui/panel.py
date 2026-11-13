@@ -113,7 +113,7 @@ class CapEditor(_Editor):
         f.addRow("Aging", self.aging)
         self.mfg_tol = _spin(0, 100, 0, 1, " %", 1)
         self.mfg_tol.setSpecialValueText("not set")
-        f.addRow("Manufacturing tolerance", self.mfg_tol)
+        f.addRow("Tolerance", self.mfg_tol)
         self._legend()
         self._mark({self.name: REQUIRED, self.cap: REQUIRED, self.esl: REQUIRED,
                     self.esr: REQUIRED, self.rated: OPTIONAL, self.kept: OPTIONAL,
@@ -444,7 +444,7 @@ class ProbeEditor(_Editor):
         self.target.setSpecialValueText("none")
         self.target_f = _spin(0, 1e7, 0, 1, " kHz", 100)
         self.target_f.setSpecialValueText("none")
-        self.btn_calc = QPushButton("Target Impedance/Frequency Calculator…")
+        self.btn_calc = QPushButton("Calculator…")
         self.btn_calc.setToolTip("Work out a target impedance and frequency from the "
                                  "device's supply tolerance and transient current")
         self.btn_calc.clicked.connect(self._calculator)
@@ -821,13 +821,13 @@ class ACPanel(QWidget, PartSelection):
         self.txt_notes.setTextFormat(Qt.RichText)
         self.txt_notes.setStyleSheet("color: #bbb;")
         row = QHBoxLayout()
-        self.btn_export = QPushButton("Export CSV…", g_res)
+        self.btn_export = QPushButton("CSV…", g_res)
         self.btn_export.setEnabled(False)
         self.btn_export.setToolTip("Write |Z|, R and X at every probe and sweep frequency to a "
                                    "CSV file")
         self.btn_export.clicked.connect(self._export_csv)
         self.btn_export_model = QToolButton(g_res)
-        self.btn_export_model.setText("Export model ▾")
+        self.btn_export_model.setText("Model")
         self.btn_export_model.setPopupMode(QToolButton.InstantPopup)
         model_menu = QMenu(self.btn_export_model)
         model_menu.addAction("Fitted poles (HyperLynx .pls)…",
@@ -837,7 +837,7 @@ class ACPanel(QWidget, PartSelection):
         self.btn_export_model.setMenu(model_menu)
         self.btn_export_model.setEnabled(False)
         self.btn_export_model.setToolTip("Export the selected probe's one-port impedance model")
-        self.btn_save = QPushButton("Save results…", g_res)
+        self.btn_save = QPushButton("Save…", g_res)
         self.btn_save.setEnabled(False)
         self.btn_save.setToolTip("Save every solved rail's results to reopen later with "
                                  "Open results… (in AC mode), without solving again")
@@ -877,7 +877,7 @@ class ACPanel(QWidget, PartSelection):
         f.addRow("Start", self.spin_fstart)
         f.addRow("Stop", self.spin_fstop)
         f.addRow("Points per decade", self.spin_ppd)
-        f.addRow("Field solves per decade", self.spin_fpd)
+        f.addRow("Solves/decade", self.spin_fpd)
         tip(f, self.spin_fstart, "Lowest frequency of the sweep")
         tip(f, self.spin_fstop, "Highest frequency of the sweep")
         tip(f, self.spin_ppd, "Frequencies per decade in the plotted sweep")
@@ -900,7 +900,7 @@ class ACPanel(QWidget, PartSelection):
                               "or else the rail's VRM target voltage). Untick to solve with every "
                               "model's capacitance as entered.")
         self.chk_bias.toggled.connect(self._ac_settings_changed)
-        self.chk_mfg = QCheckBox("Manufacturing tolerance")
+        self.chk_mfg = QCheckBox("Tolerance")
         self.chk_mfg.setChecked(s.mfg_tolerance)
         d.addRow(self.chk_mfg)
         tip(d, self.chk_mfg, "Solve the capacitor models that have a Manufacturing tolerance "
@@ -998,7 +998,7 @@ class ACPanel(QWidget, PartSelection):
                                           "(mm of edge per mm of distance)", "mesh", "grading"))
         tip(f, self.spin_min_edge, art_tip("Mesh edge length at plated holes, where via "
                                            "inductance is decided", "mesh", "min"))
-        self.chk_near = QCheckBox("Grade only near the rail")
+        self.chk_near = QCheckBox("Grade near rail")
         self.chk_near.setChecked(s.grade_near_rail_only)
         f.addRow(self.chk_near)
         tip(f, self.chk_near, art_tip(
@@ -1007,7 +1007,7 @@ class ACPanel(QWidget, PartSelection):
             "current: a board stitched with many of them solves much faster, with the same "
             "result. All the copper is kept either way.", "near_rail", "near"))
         self.chk_near.toggled.connect(self._ac_settings_changed)
-        self.chk_far = QCheckBox("Coarsen far from the rail, up to")
+        self.chk_far = QCheckBox("Coarsen far, up to")
         self.chk_far.setChecked(s.coarsen_far)
         self.spin_far_edge = _spin(0.5, 20.0, s.far_max_edge_mm, 1, " mm", 0.5)
         self.spin_far_edge.setEnabled(s.coarsen_far)

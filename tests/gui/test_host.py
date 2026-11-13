@@ -364,3 +364,39 @@ def test_a_file_kipi_cannot_read_stops_it(started, tmp_path, capsys):
     assert main([str(other)]) == 2
     assert "No such file" in capsys.readouterr().err
     assert started == {}
+
+
+def test_capture_view_png_writes_the_current_view(app, no_3d, tmp_path):
+    from qtpy.QtGui import QImage
+    from kipi.gui.main_window import MainWindow
+
+    w = MainWindow()
+    w.views.setCurrentWidget(w.plot)
+    plot_png = tmp_path / "plot.png"
+    assert w.capture_view_png(str(plot_png))
+    assert plot_png.stat().st_size > 0 and not QImage(str(plot_png)).isNull()
+
+    w.views.setCurrentWidget(w.viewer)
+    view_png = tmp_path / "view.png"
+    w.viewer.screenshot = lambda path: QImage(2, 2, QImage.Format.Format_RGB32).save(
+        path, "PNG")
+    assert w.capture_view_png(str(view_png))
+    assert view_png.stat().st_size > 0
+
+    broken = tmp_path / "broken.png"
+    w.viewer.screenshot = lambda path: None
+    assert not w.capture_view_png(str(broken))
+    assert not broken.exists()
+    w.close()
+
+
+def test_window_gives_the_setup_dock_a_content_width(app, no_3d):
+    from kipi.gui.main_window import MainWindow
+
+    w = MainWindow()
+    w.resize(1500, 900)
+    w.show()
+    _idle(app, w)
+    assert w.solve_dock.width() >= 320
+    assert w.solve_panel.minimumSizeHint().width() <= w.solve_dock.minimumWidth()
+    w.close()

@@ -1,15 +1,18 @@
-"""Files the AI assistant can take as context: PDF, Word, Excel/CSV, text and HTML.
+"""Files the AI assistant can take as context: PDF, Word, Excel/CSV, text, HTML and images.
 
-The text is extracted here and sent with the user's message, so every provider sees the
-same plain text; nothing provider-specific is uploaded. Each file is capped and the
-assistant panel caps the total, so one long PDF cannot fill the model's context by itself.
+Text is extracted here and sent with the user's message, so every provider sees the same
+text. Images are resized and encoded here, then sent as image blocks by the provider
+adapters; their base64 never goes to disk. Each file is capped and the assistant panel caps
+the total, so one long PDF or a pile of screenshots cannot fill the model's context.
 """
 
 from __future__ import annotations
 
+import base64
 import csv
 import io
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -24,9 +27,16 @@ MAX_FULL_CHARS = 1_000_000
 MAX_PDF_PAGES = 200
 MAX_TABLE_ROWS = 200
 
+#: Images: longest edge sent to the model, source/encoded byte caps, per-message count.
+MAX_IMAGE_DIM = 1568
+MAX_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_IMAGES_PER_MESSAGE = 4
+
 TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".log", ".py", ".json", ".yaml", ".yml", ".xml"}
 TABLE_SUFFIXES = {".csv", ".tsv"}
 HTML_SUFFIXES = {".html", ".htm"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 
 
 @dataclass
@@ -38,10 +48,21 @@ class Attachment:
     note: str
     full_text: str = ""
     pages: List[Tuple[int, str]] = field(default_factory=list)
+    # Images carry their encoded bytes and metadata; text files leave these defaults.
+    kind: str = "text"              # "text" | "image"
+    mime: str = ""                  # image/png, image/jpeg
+    data: str = ""                  # base64; memory only, never persisted
+    width: int = 0
+    height: int = 0
+    byte_size: int = 0              # encoded bytes
 
     @property
     def chars(self) -> int:
-        return len(self.full_text or self.text)
+        return 0 if self.is_image else len(self.full_text or self.text)
+
+    @property
+    def is_image(self) -> bool:
+        return self.kind == "image"
 
     @property
     def complete(self) -> bool:
@@ -172,11 +193,104 @@ def _pdf_pages(text: str) -> List[Tuple[int, str]]:
             for i in range(1, len(parts) - 1, 2)]
 
 
-def extract_attachment(path: Path, limit: int = MAX_FILE_CHARS) -> Attachment:
+def _fit_image(image, max_edge: int = MAX_IMAGE_DIM):
+    """Scale down so the longest edge is at most ``max_edge``; never enlarge."""
+    from qtpy.QtCore import Qt
+    width, height = image.width(), image.height()
+    long_edge = max(width, height)
+    if long_edge <= max_edge or long_edge <= 0:
+        return image
+    scale = max_edge / float(long_edge)
+    return image.scaled(max(1, round(width * scale)), max(1, round(height * scale)),
+                        Qt.AspectRatioMode.IgnoreAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation)
+
+
+def _encode_image(image, fmt: str, quality: int = 85) -> bytes:
+    """Encode a QImage in memory; JPEG has no alpha, so composite it onto white."""
+    from qtpy.QtCore import QBuffer, QIODevice, Qt
+    from qtpy.QtGui import QImage, QPainter
+    if fmt.upper() == "JPEG":
+        rgb = QImage(image.size(), QImage.Format.Format_RGB32)
+        rgb.fill(Qt.GlobalColor.white)
+        painter = QPainter(rgb)
+        try:
+            painter.drawImage(0, 0, image)
+        finally:
+            painter.end()
+        image = rgb
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    try:
+        ok = image.save(buffer, fmt, quality) if fmt.upper() == "JPEG" \
+            else image.save(buffer, fmt)
+        if not ok:
+            raise ValueError("图片编码失败")
+        return bytes(buffer.data())
+    finally:
+        buffer.close()
+
+
+def _image_attachment(path: Path, name: str) -> Attachment:
+    """Load, orient, bound, encode and base64 one image for the model."""
+    from qtpy.QtCore import Qt
+    from qtpy.QtGui import QImageReader
+
+    if path.stat().st_size > MAX_IMAGE_BYTES:
+        raise ValueError(
+            f"图片超过 {MAX_IMAGE_BYTES // (1024 * 1024)} MB 上限")
+    reader = QImageReader(str(path))
+    reader.setAutoTransform(True)
+    size = reader.size()
+    if size.isValid() and max(size.width(), size.height()) > MAX_IMAGE_DIM:
+        # Bound the decoded size before reading, so a decompression bomb cannot allocate
+        # a huge buffer just to be scaled down afterwards.
+        reader.setScaledSize(size.scaled(MAX_IMAGE_DIM, MAX_IMAGE_DIM,
+                                         Qt.AspectRatioMode.KeepAspectRatio))
+    frames = reader.imageCount()
+    image = reader.read()
+    if image.isNull():
+        raise ValueError(f"无法读取图片：{reader.errorString() or '格式不支持'}")
+    image = _fit_image(image)
+
+    fmt = "JPEG" if path.suffix.lower() in (".jpg", ".jpeg") else "PNG"
+    mime = "image/jpeg" if fmt == "JPEG" else "image/png"
+    raw = _encode_image(image, fmt)
+    attempts = 0
+    while len(raw) > MAX_IMAGE_BYTES and attempts < 4:
+        attempts += 1
+        if fmt != "JPEG":
+            fmt, mime = "JPEG", "image/jpeg"
+            raw = _encode_image(image, fmt)
+            continue
+        ratio = math.sqrt(MAX_IMAGE_BYTES / float(len(raw))) * 0.95
+        ratio = max(0.25, min(0.75, ratio))
+        edge = max(1, int(max(image.width(), image.height()) * ratio))
+        image = _fit_image(image, edge)
+        raw = _encode_image(image, fmt)
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise ValueError(
+            f"图片压缩后仍超过 {MAX_IMAGE_BYTES // (1024 * 1024)} MB 上限")
+
+    data = base64.b64encode(raw).decode("ascii")
+    width, height = image.width(), image.height()
+    note = f"图片，{width}×{height}，{max(1, math.ceil(len(raw) / 1024))} KB"
+    if frames and frames > 1:
+        note += "，只取第一帧"
+    text = f"（图片：{name}，{width}×{height}）"
+    return Attachment(name, text, note, kind="image", mime=mime, data=data,
+                      width=width, height=height, byte_size=len(raw))
+
+
+def extract_attachment(path: Path, limit: int = MAX_FILE_CHARS,
+                       *, display_name: str = "") -> Attachment:
     """Read one file: the opening text for the message, and the full text for tools."""
     path = Path(path)
     suffix = path.suffix.lower()
+    name = display_name or path.name
     try:
+        if suffix in IMAGE_SUFFIXES:
+            return _image_attachment(path, name)
         if suffix == ".pdf":
             full_text, note = _pdf(path)
         elif suffix == ".docx":
@@ -204,10 +318,11 @@ def extract_attachment(path: Path, limit: int = MAX_FILE_CHARS) -> Attachment:
         full_text = full_text[:MAX_FULL_CHARS].rstrip() + "\n…（文件过长，只保留前 100 万字）"
     digest, cut = _truncate(full_text, limit)
     if not digest:
-        return Attachment(path.name, "（没有提取到文字；如果是扫描版 PDF，需要先做 OCR。）",
+        return Attachment(name, "（没有提取到文字；如果是扫描版 PDF，需要先做 OCR。）",
                           f"{note}，未提取到文字")
     pages = _pdf_pages(full_text) if suffix == ".pdf" else []
     chars = f"{len(full_text):,} 字"
     sent = f"，随消息发送前 {len(digest):,} 字" if cut else ""
     note = f"{note}，{chars}{sent}"
-    return Attachment(path.name, digest, note, full_text, pages)
+    return Attachment(name, digest, note, full_text, pages)
+

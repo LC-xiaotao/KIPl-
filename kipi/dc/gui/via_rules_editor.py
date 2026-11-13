@@ -68,10 +68,10 @@ class ViaRulesEditor(QWidget):
         self.table.setMinimumHeight(160)
         buttons = QHBoxLayout()
         for text, slot, tip in (
-                ("Add row", self._add, "Add a rule at the end of the table"),
-                ("Remove row", self._remove, "Remove the selected rule"),
-                ("Defaults", self._defaults, "Replace the rules with the IPC-6012 Class 2 "
-                                             "defaults")):
+                ("Add", self._add, "Add a rule at the end of the table"),
+                ("Remove", self._remove, "Remove the selected rule"),
+                ("IPC", self._defaults, "Replace the rules with the IPC-6012 Class 2 "
+                                        "defaults")):
             b = QPushButton(text)
             b.setToolTip(tip)
             b.clicked.connect(slot)

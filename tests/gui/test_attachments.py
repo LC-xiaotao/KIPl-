@@ -71,3 +71,65 @@ def test_a_binary_file_is_refused(tmp_path):
     path.write_bytes(b"\x00\x01\x02")
     with pytest.raises(ValueError, match="不是可读取"):
         extract_attachment(path)
+
+
+import base64
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    pytest.importorskip("qtpy")
+    from qtpy.QtWidgets import QApplication
+    return QApplication.instance() or QApplication([])
+
+
+def test_image_is_resized_and_encoded(tmp_path, qapp):
+    from qtpy.QtGui import QImage
+
+    path = tmp_path / "big.png"
+    image = QImage(2400, 1200, QImage.Format.Format_RGB32)
+    image.fill(0xff112233)
+    assert image.save(str(path), "PNG")
+
+    attachment = extract_attachment(path)
+    assert attachment.is_image
+    assert attachment.mime == "image/png"
+    assert max(attachment.width, attachment.height) == 1568
+    assert attachment.chars == 0 and attachment.complete
+    assert attachment.data
+    assert base64.b64decode(attachment.data).startswith(b"\x89PNG")
+    assert "（图片：" in attachment.text and "图片" in attachment.note
+
+    named = extract_attachment(path, display_name="截图-当前视图.png")
+    assert named.name == "截图-当前视图.png"
+
+
+def test_jpeg_is_sent_as_jpeg(tmp_path, qapp):
+    from qtpy.QtGui import QImage
+
+    path = tmp_path / "photo.jpg"
+    image = QImage(120, 80, QImage.Format.Format_RGB32)
+    image.fill(0xffabcdef)
+    assert image.save(str(path), "JPG")
+    attachment = extract_attachment(path)
+    assert attachment.mime == "image/jpeg"
+    assert base64.b64decode(attachment.data).startswith(b"\xff\xd8")
+
+
+def test_a_corrupt_image_is_reported(tmp_path, qapp):
+    path = tmp_path / "bad.png"
+    path.write_bytes(b"not an image")
+    with pytest.raises(ValueError, match="无法读取图片"):
+        extract_attachment(path)
+
+
+def test_an_oversize_image_file_is_rejected(tmp_path, qapp):
+    from kipi.gui.assistant.attachments import MAX_IMAGE_BYTES
+
+    path = tmp_path / "huge.png"
+    path.write_bytes(b"\0" * (MAX_IMAGE_BYTES + 1))
+    with pytest.raises(ValueError, match="MB 上限"):
+        extract_attachment(path)

@@ -195,13 +195,16 @@ TOOLS: List[dict] = [
            "max_temp_c": {"type": "number", "description": "铜温上限 °C，可选"},
            "max_rise_c": {"type": "number", "description": "相对环境温升上限 °C，可选"},
            "clear_limits": {"type": "boolean", "description": "清除铜温/温升限值"}}),
-    _tool("list_attachments", "列出当前对话上传的附件：名称、页数、字数和是否完整。", {}),
-    _tool("search_attachment", "在附件全文中搜索关键词，返回页码和上下文。",
+    _tool("list_attachments", "列出当前对话上传的附件：名称、类型、页数或图片尺寸、"
+                              "字数和是否完整。", {}),
+    _tool("search_attachment", "在文本附件全文中搜索关键词，返回页码和上下文；"
+                               "图片附件没有可搜索的文字。",
           {"name": {"type": "string", "description": "附件名，留空搜索全部附件"},
            "query": {"type": "string", "description": "关键词或短语"},
            "max_hits": {"type": "integer", "description": "最多返回多少条，默认 8"}},
           ["query"]),
-    _tool("read_attachment", "读取附件的指定页或字符范围（每次最多约 7000 字）。",
+    _tool("read_attachment", "读取文本附件的指定页或字符范围（每次最多约 7000 字）；"
+                             "图片附件只返回名称、尺寸等元数据。",
           {"name": {"type": "string", "description": "附件名"},
            "start_page": {"type": "integer", "description": "起始页（PDF，从 1 开始）"},
            "end_page": {"type": "integer", "description": "结束页（含）"},
@@ -447,6 +450,11 @@ class ToolRunner:
         for attachment in self.attachments.values():
             attachments.append({
                 "name": attachment.name, "note": attachment.note,
+                "kind": attachment.kind,
+                "mime": attachment.mime or None,
+                "width": attachment.width or None,
+                "height": attachment.height or None,
+                "byte_size": attachment.byte_size or None,
                 "pages": len(attachment.pages) or None,
                 "chars": attachment.chars,
                 "sent_chars": len(attachment.text),
@@ -462,10 +470,12 @@ class ToolRunner:
             raise ValueError("query 不能为空")
         name = str(args.get("name") or "").strip()
         limit = max(1, min(int(args.get("max_hits") or 8), 20))
-        selected = [a for a in self.attachments.values()
-                    if not name or a.name == name]
-        if not selected:
+        matched = [a for a in self.attachments.values()
+                   if not name or a.name == name]
+        if not matched:
             raise ValueError("当前对话没有这个附件")
+        images = [a for a in matched if a.is_image]
+        selected = [a for a in matched if not a.is_image]
         hits = []
         needle = query.lower()
         for attachment in selected:
@@ -482,13 +492,23 @@ class ToolRunner:
                              "page": _attachment_page(attachment, index),
                              "offset": index, "snippet": text[left:right]})
                 start = index + max(1, len(query))
-        return {"query": query, "count": len(hits), "hits": hits}
+        result = {"query": query, "count": len(hits), "hits": hits}
+        if images:
+            result["image_names"] = [a.name for a in images]
+            result["note"] = "图片附件没有可搜索的文字；请直接查看随消息发送的图片。"
+        return result
 
     def tool_read_attachment(self, args) -> dict:
         name = str(args.get("name") or "").strip()
         attachment = self.attachments.get(name)
         if attachment is None:
             raise ValueError(f"当前对话没有附件 {name}")
+        if attachment.is_image:
+            return {"name": attachment.name, "kind": "image",
+                    "mime": attachment.mime, "width": attachment.width,
+                    "height": attachment.height, "chars": 0, "text": "",
+                    "note": "这是图片附件，没有可读取的文字内容；"
+                            "请直接查看随消息发送的图片。"}
         start_page = args.get("start_page")
         end_page = args.get("end_page")
         if attachment.pages and (start_page is not None or end_page is not None):
@@ -539,7 +559,7 @@ class ToolRunner:
         ground = _pin(args, "ground")
         if kind != "source" and inp is None:
             raise ValueError(f"{kind} 需要 input_net 和 input_part")
-        for ref, pin in (("input", inp), ("ground", ground)):
+        for _ref, pin in (("input", inp), ("ground", ground)):
             if pin is not None:
                 _check_nets(main, [pin.net])
                 _check_part(main, pin.ref)

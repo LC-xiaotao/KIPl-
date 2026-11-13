@@ -16,11 +16,12 @@ import numpy as np
 from qtpy.QtCore import QFileSystemWatcher, QSettings, Qt, QTimer, Signal
 from qtpy.QtGui import QAction, QColor, QIcon, QPixmap, QTextCursor
 from qtpy.QtWidgets import (
-    QAbstractScrollArea, QAbstractSpinBox, QButtonGroup, QCheckBox, QComboBox, QDockWidget,
-    QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
-    QPushButton, QRadioButton, QSizePolicy, QSlider, QScrollArea, QSplitter, QStackedWidget,
-    QTabWidget, QTableWidget, QTextBrowser, QToolBar, QToolButton, QVBoxLayout, QWidget,
+    QAbstractScrollArea, QAbstractSpinBox, QApplication, QButtonGroup, QCheckBox, QComboBox,
+    QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
+    QProgressBar, QPushButton, QRadioButton, QSizePolicy, QSlider, QScrollArea, QSplitter,
+    QStackedWidget, QTabWidget, QTableWidget, QTextBrowser, QToolBar, QToolButton, QVBoxLayout,
+    QWidget,
 )
 
 from kipi import __version__
@@ -78,6 +79,15 @@ VIA_PICK_PX = 10      # a click this close to a via barrel on screen selects it
 PREFERRED_SIZE = (1500, 950)
 
 
+def _geometry_settings() -> Optional[QSettings]:
+    """The settings the window layout is kept in, or None under a test's bare QApplication
+    (whose windows must not write this machine's real layout)."""
+    app = QApplication.instance()
+    if app is None or app.applicationName() != "KiPI":
+        return None
+    return QSettings("KiPI", "KiPI")
+
+
 def _scrolling(widget: QWidget) -> QScrollArea:
     """``widget`` in a scroll area: a dock that is shorter than its contents scrolls
     instead of making the whole window taller than the screen."""
@@ -112,9 +122,27 @@ def _adapt_panel(panel: QWidget) -> None:
             form.setFieldGrowthPolicy(growth)
     for field in panel.findChildren(QWidget):
         if isinstance(field, (QComboBox, QLineEdit, QAbstractSpinBox)):
-            field.setMinimumWidth(56)
+            if field.minimumWidth() <= 0:
+                field.setMinimumWidth(56)
             field.setSizePolicy(QSizePolicy.Expanding, field.sizePolicy().verticalPolicy())
+            if isinstance(field, QComboBox):
+                # A combo's size hint otherwise follows its longest item ("Source (ideal
+                # supply, no input)"), which alone can keep the setup dock wide.
+                try:
+                    field.setSizeAdjustPolicy(
+                        QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+                except AttributeError:          # Qt 5 spelling
+                    field.setSizeAdjustPolicy(
+                        QComboBox.AdjustToMinimumContentsLengthWithIcon)
+                field.setMinimumContentsLength(8)
+                # A combo whose current item is long ("Equal across the supply pins")
+                # otherwise pushes the whole form wide; cap its field width so QFormLayout
+                # wraps the label above it instead.
+                field.setMaximumWidth(240)
         elif isinstance(field, QTableWidget):
+            field.setMinimumWidth(0)
+            field.setSizePolicy(QSizePolicy.Ignored,
+                                field.sizePolicy().verticalPolicy())
             field.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
             field.horizontalHeader().setMinimumSectionSize(24)
     for table in panel.findChildren(QTableWidget):
@@ -170,6 +198,18 @@ class MainWindow(QMainWindow):
         self.host = host or current_host()
         self._set_title("Power Integrity")
         self.resize(*PREFERRED_SIZE)
+        self._layout_ready = False
+        self._saved_dock_width = 0
+        settings = _geometry_settings()
+        if settings is not None:
+            geometry = settings.value("window/geometry")
+            if geometry is not None and not self.restoreGeometry(geometry):
+                self.resize(*PREFERRED_SIZE)
+            try:
+                self._saved_dock_width = int(
+                    settings.value("window/right_dock_width", 0) or 0)
+            except (TypeError, ValueError):
+                self._saved_dock_width = 0
         self._fitted = False
         self._source = source
         self._tool = tool or InstalledTool()
@@ -852,7 +892,7 @@ class MainWindow(QMainWindow):
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
         dock.setWidget(holder)
         self.solve_dock = dock
-        dock.setMinimumWidth(300)
+        dock.setMinimumWidth(320)
         make_detachable(dock)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         self._last_solve_error = None
@@ -917,6 +957,18 @@ class MainWindow(QMainWindow):
         if not self._fitted:
             self._fitted = True
             fit_to_screen(self)
+            self._apply_window_layout()
+
+    def _apply_window_layout(self) -> None:
+        """Give the right setup dock a content-sized width on the first show: the saved
+        width, or 360 px, clamped so the 3D view keeps at least two thirds of the window."""
+        if self._layout_ready or not hasattr(self, "solve_dock"):
+            return
+        self._layout_ready = True
+        width = self._saved_dock_width or 360
+        width = max(self.solve_dock.minimumWidth(),
+                    min(width, max(320, self.width() // 3)))
+        self.resizeDocks([self.solve_dock], [width], Qt.Horizontal)
 
     def log(self, text: str, level: int = logging.INFO):
         color = {logging.WARNING: "#e0b050", logging.ERROR: "#ff6060"}.get(level)
@@ -1195,6 +1247,34 @@ class MainWindow(QMainWindow):
             else:
                 self.viewer.screenshot(path)
             self.log(f"Screenshot saved to {path}")
+
+    def capture_view_png(self, path: str) -> bool:
+        """Write the current central view to ``path`` as PNG; True on a non-empty file.
+
+        The assistant's 截图 button uses this. Plots save through matplotlib and work
+        while hidden; the 3D view needs a VTK render first, and a failed VTK capture is
+        reported as a failure rather than falling back to a black QWidget.grab().
+        """
+        target = Path(path)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return False
+        widget = self.views.currentWidget()
+        try:
+            if widget is self.viewer:
+                self.viewer.render()
+                self.viewer.screenshot(str(target))
+                return target.is_file() and target.stat().st_size > 0
+            saver = getattr(widget, "save_png", None)
+            if callable(saver):
+                saver(str(target))
+            if target.is_file() and target.stat().st_size > 0:
+                return True
+            return (bool(widget.grab().save(str(target), "PNG"))
+                    and target.stat().st_size > 0)
+        except Exception:              # no VTK context, hidden/empty figure, tearing down
+            return False
 
     def _set_snapshot(self, snap: BoardSnapshot):
         prev = self.snapshot
@@ -2604,6 +2684,11 @@ class MainWindow(QMainWindow):
         if not self._keep_or_drop_changes():
             event.ignore()
             return
+        settings = _geometry_settings()
+        if settings is not None:
+            settings.setValue("window/geometry", self.saveGeometry())
+            settings.setValue("window/right_dock_width", self.solve_dock.width())
+            settings.sync()
         assistant = getattr(self, "assistant", None)
         if assistant is not None:
             assistant.save_conversation()

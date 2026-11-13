@@ -189,3 +189,11 @@ def test_large_pad_controls_edit_the_settings(app):
     assert not panel.chk_large_pads.isChecked() and panel.sld_large_pad.value() == 10
     assert other.to_dict() == before
     panel.close()
+
+
+def test_panel_fits_the_right_dock_width(app):
+    from kipi.gui.main_window import _adapt_panel
+
+    panel = PIPanel()
+    _adapt_panel(panel)
+    assert panel.minimumSizeHint().width() <= 300

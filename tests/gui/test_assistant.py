@@ -780,3 +780,283 @@ def test_markdown_headings_use_the_transcript_style():
     body = _markdown_html("## 结论\n\n正文 **粗体**")
     assert "x-large" not in body
     assert "font-weight:700" in body
+
+
+def _image_attachment(name="view.png", data="QUJD"):
+    from kipi.gui.assistant.attachments import Attachment
+    return Attachment(name, f"（图片：{name}，10×20）", "图片，10×20，1 KB",
+                      kind="image", mime="image/png", data=data,
+                      width=10, height=20, byte_size=3)
+
+
+def test_openai_images_are_content_parts():
+    history = [{"role": "user", "content": "看图",
+                "images": [{"mime": "image/png", "data": "QUJD"}]}]
+    url, headers, body = build_request(
+        Config(provider="OpenAI", api_key="k"), "sys", history, [])
+    content = body["messages"][1]["content"]
+    assert content[0] == {"type": "text", "text": "看图"}
+    assert content[1] == {"type": "image_url",
+                          "image_url": {"url": "data:image/png;base64,QUJD"}}
+
+    url, headers, body = build_request(
+        Config(provider="OpenAI", api_key="k"), "sys",
+        [{"role": "user", "content": "", "images": [{"mime": "image/png",
+                                                     "data": "QUJD"}]}], [])
+    assert body["messages"][1]["content"] == [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}}]
+
+
+def test_anthropic_images_are_base64_blocks():
+    history = [{"role": "user", "content": "看图",
+                "images": [{"mime": "image/jpeg", "data": "QUJD"}]}]
+    url, headers, body = build_request(
+        Config(provider="Anthropic", api_key="k"), "sys", history, [])
+    blocks = body["messages"][0]["content"]
+    assert blocks[0] == {"type": "text", "text": "看图"}
+    assert blocks[1] == {"type": "image", "source": {
+        "type": "base64", "media_type": "image/jpeg", "data": "QUJD"}}
+
+
+def test_request_history_keeps_only_the_latest_image_message():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    old = _image_attachment("old.png", "OLD")
+    new = _image_attachment("new.png", "NEW")
+    dock.history = [
+        {"role": "user", "content": "first", "images": [{"mime": old.mime,
+                                                        "data": old.data}]},
+        {"role": "assistant", "content": "ok"},
+        {"role": "user", "content": "second", "images": [{"mime": new.mime,
+                                                         "data": new.data}]},
+        {"role": "user", "content": "follow up"},
+    ]
+    sent = dock._request_history()
+    assert "images" not in sent[0]
+    assert sent[2]["images"][0]["data"] == "NEW"
+    assert "images" not in sent[3]
+
+
+def test_config_vision_roundtrip(tmp_path):
+    settings = QSettings(str(tmp_path / "assistant.ini"), QSettings.Format.IniFormat)
+    Config(provider="OpenAI", api_key="k", vision=True).save(settings)
+    assert Config.load(settings).vision is True
+    settings.setValue("assistant/vision", "false")
+    assert Config.load(settings).vision is False
+    settings.setValue("assistant/vision", "true")
+    assert Config.load(settings).vision is True
+
+    settings.remove("assistant/vision")
+    settings.setValue("assistant/provider", "OpenAI")
+    assert Config.load(settings).vision is True
+    settings.setValue("assistant/provider", "DeepSeek")
+    assert Config.load(settings).vision is False
+
+
+def test_settings_dialog_vision_checkbox():
+    from kipi.gui.assistant.panel import SettingsDialog
+
+    dialog = SettingsDialog(Config(provider="DeepSeek", api_key="k"))
+    assert not dialog.chk_vision.isChecked()
+    dialog._preset_changed("OpenAI")
+    assert dialog.chk_vision.isChecked() and dialog.value().vision is True
+    dialog.chk_vision.setChecked(False)
+    assert dialog.value().vision is False
+
+
+def test_sending_an_image_requires_vision():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    dock.config = Config(provider="DeepSeek", api_key="k", vision=False)
+    dock._pending_attachments = [_image_attachment()]
+    dock.input.setPlainText("看图")
+    sent = []
+    dock.client.send = lambda config, system, history, tools: sent.append(list(history))
+    dock._send()
+    assert not sent and not dock.history
+    assert dock._pending_attachments              # kept for after enabling vision
+    assert "图片输入" in dock.view.toPlainText()
+
+    dock.config.vision = True
+    dock._send()
+    assert len(sent) == 1 and sent[0][-1]["images"][0]["data"] == "QUJD"
+    assert "QUJD" not in sent[0][-1]["content"]
+    assert not dock._pending_attachments
+
+
+class _CaptureMain(_Main):
+    def capture_view_png(self, path):
+        from qtpy.QtGui import QColor, QImage
+        image = QImage(20, 10, QImage.Format.Format_RGB32)
+        image.fill(QColor("red"))
+        return image.save(path, "PNG")
+
+
+def test_capture_view_attaches_an_image():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_CaptureMain())
+    dock._capture_view()
+    assert len(dock._pending_attachments) == 1
+    attachment = dock._pending_attachments[0]
+    assert attachment.is_image and attachment.data
+    assert attachment.name.startswith("截图-")
+    assert "待发送附件" in dock.lbl_attach.text()
+
+    plain = AssistantDock(_Main())
+    plain._capture_view()
+    assert not plain._pending_attachments
+    assert "不支持截取视图" in plain.view.toPlainText()
+
+
+def test_capture_view_stops_at_four_images():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_CaptureMain())
+    dock._pending_attachments = [_image_attachment(f"{i}.png") for i in range(4)]
+    dock._capture_view()
+    assert len(dock._pending_attachments) == 4
+    assert "最多" in dock.view.toPlainText()
+
+
+def test_saved_conversation_has_no_image_bytes(tmp_path):
+    from kipi.gui.assistant.panel import AssistantDock
+    from kipi.gui.assistant.store import ConversationStore
+
+    store = ConversationStore(tmp_path)
+    dock = AssistantDock(_Main(), store=store)
+    dock.history = [{"role": "user", "content": "看图",
+                     "images": [{"mime": "image/png", "data": "QUJD"}]}]
+    dock._attachments["view.png"] = _image_attachment()
+    dock.save_conversation()
+
+    raw = store.load()
+    assert "QUJD" not in json.dumps(raw, ensure_ascii=False)
+    assert "images" not in raw["history"][0]
+    assert "本消息含 1 张图片" in raw["history"][0]["content"]
+    saved = raw["attachments"][0]
+    assert saved["kind"] == "image" and saved["mime"] == "image/png"
+    assert "data" not in saved
+
+
+def test_image_attachment_tools():
+    from kipi.gui.assistant.tools import ToolRunner
+
+    runner = ToolRunner(_Main())
+    runner.attachments = {"view.png": _image_attachment()}
+    listed = runner.tool_list_attachments({})
+    item = listed["attachments"][0]
+    assert item["kind"] == "image" and item["width"] == 10 and item["height"] == 20
+    assert "data" not in item
+    found = runner.tool_search_attachment({"query": "x"})
+    assert found["count"] == 0 and "图片" in found["note"]
+    read = runner.tool_read_attachment({"name": "view.png"})
+    assert read["kind"] == "image" and read["text"] == "" and "图片" in read["note"]
+
+
+def test_suggestions_are_split_from_the_reply():
+    from kipi.gui.assistant.panel import _split_suggestions
+
+    body, items = _split_suggestions(
+        "结论：VIN 压降正常。\n\n### 建议下一步\n- 检查 3V3 的 VRM 设置\n- 运行一次 DC 仿真")
+    assert body == "结论：VIN 压降正常。"
+    assert items == ["检查 3V3 的 VRM 设置", "运行一次 DC 仿真"]
+
+    body, items = _split_suggestions("**建议下一步**\n1. 查看 VOUT 压降\n2. 导出报告")
+    assert body == "" and items == ["查看 VOUT 压降", "导出报告"]
+
+    body, items = _split_suggestions("下一步可以：\n- 检查 GND 连通性")
+    assert body == "" and items == ["检查 GND 连通性"]
+
+    body, items = _split_suggestions("普通列表：\n- 第一项\n- 第二项")
+    assert body.startswith("普通列表") and items == []
+
+
+def test_suggestion_buttons_fill_the_input_or_send():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    dock.config = Config(provider="DeepSeek", api_key="", vision=False)
+    dock.chk_suggestion_send.blockSignals(True)
+    dock.chk_suggestion_send.setChecked(False)
+    dock.chk_suggestion_send.blockSignals(False)
+    dock._set_suggestions(["检查 3V3", "运行 DC"])
+    assert dock.suggestion_buttons.count() == 2
+    assert dock.suggestion_box.isVisible() or not dock.isVisible()
+
+    dock.suggestion_buttons.itemAt(0).widget().click()
+    assert dock.input.toPlainText() == "检查 3V3"
+
+    dock.chk_suggestion_send.blockSignals(True)
+    dock.chk_suggestion_send.setChecked(True)
+    dock.chk_suggestion_send.blockSignals(False)
+    sent = []
+    dock._send = lambda: sent.append(dock.input.toPlainText())
+    dock.suggestion_buttons.itemAt(1).widget().click()
+    assert sent == ["运行 DC"]
+
+
+def test_a_reply_renders_its_suggestions_as_buttons(monkeypatch):
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    dock.config = Config(provider="DeepSeek", api_key="k")
+
+    def send(config, system, history, tools):
+        dock.client.done.emit({"choices": [{"message": {
+            "content": "结论。\n\n### 建议下一步\n- 检查 VIN\n- 运行 DC"}}]}, "")
+
+    monkeypatch.setattr(dock.client, "send", send)
+    dock.input.setPlainText("看看板卡")
+    dock._send()
+    assert dock.suggestion_buttons.count() == 2
+    assert "### 建议下一步" not in dock.view.toPlainText()
+    assert "检查 VIN" in dock.history[-1]["content"]
+
+
+def test_suggestions_survive_a_conversation_roundtrip(tmp_path):
+    from kipi.gui.assistant.panel import AssistantDock
+    from kipi.gui.assistant.store import ConversationStore
+
+    store = ConversationStore(tmp_path)
+    dock = AssistantDock(_Main(), store=store)
+    dock._items = [{"kind": "message", "speaker": "助手", "text": "结论",
+                    "color": "", "markdown": True, "html": "",
+                    "suggestions": ["检查 VIN"]}]
+    dock.save_conversation()
+
+    reopened = AssistantDock(_Main(), store=store)
+    assert reopened.suggestion_buttons.count() == 1
+    assert reopened.suggestion_buttons.itemAt(0).widget().toolTip() == "检查 VIN"
+
+
+def test_assistant_can_shrink_to_the_dock_minimum():
+    from kipi.gui.assistant.panel import AssistantDock
+
+    dock = AssistantDock(_Main())
+    assert dock.widget().minimumSizeHint().width() <= 300
+    dock._set_suggestions(["检查 VOUT 的 VRM 输出电压设置",
+                          "对 GND 运行一次 DC 仿真并查看压降"])
+    assert dock.widget().minimumSizeHint().width() <= 300
+
+
+def test_suggestions_start_collapsed_and_expand(monkeypatch):
+    from kipi.gui.assistant import panel as panel_mod
+
+    class _Settings:
+        def value(self, *args):
+            return args[1] if len(args) > 1 else None
+
+        def setValue(self, *args):
+            pass
+
+    monkeypatch.setattr(panel_mod, "QSettings", lambda *args: _Settings())
+    dock = panel_mod.AssistantDock(_Main())
+    dock._set_suggestions(["检查 VOUT", "运行 DC"])
+    assert dock.suggestion_list.isHidden()
+    assert "建议下一步（2）" in dock.btn_suggestions.text()
+    dock.btn_suggestions.click()
+    assert not dock.suggestion_list.isHidden()
+    assert "▼" in dock.btn_suggestions.text()

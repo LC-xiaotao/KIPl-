@@ -874,7 +874,7 @@ class NoisePanel(QWidget, PartSelection):
         self.cmb_victims.setToolTip("The victims to solve: all of them, one, or none (the "
                                     "aggressor's waveforms only)")
         self.cmb_victims.currentIndexChanged.connect(self._victims_changed)
-        self.chk_scan = QCheckBox("Scan nearby nets", self)
+        self.chk_scan = QCheckBox("Scan", self)
         self.chk_scan.setToolTip(art_tip(
             "Also look for victims: estimate the noise on every signal net with a trace near "
             "the aggressor and solve the worst in full, with the scan's default driver and "

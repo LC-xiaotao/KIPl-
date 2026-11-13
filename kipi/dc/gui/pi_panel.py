@@ -109,6 +109,9 @@ class RangeRow(QWidget):
         for s in (self.min, self.max):
             s.valueChanged.connect(self._changed)
         self.unit.currentIndexChanged.connect(self._unit_changed)
+        # A form row with this widget otherwise reports both spin boxes' hints plus the
+        # unit, which keeps the narrow setup dock wider than its 300 px minimum.
+        self.setMaximumWidth(260)
 
     def fields(self):
         return self.min, self.max, self.unit
@@ -254,13 +257,13 @@ class PinPicker(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         self.cmb_net = QComboBox(self)
         make_searchable(self.cmb_net)
-        self.cmb_net.setMinimumContentsLength(10)
+        self.cmb_net.setMinimumContentsLength(8)
         self.cmb_part = QComboBox(self)
         make_searchable(self.cmb_part)
-        self.cmb_part.setMinimumContentsLength(8)
+        self.cmb_part.setMinimumContentsLength(6)
         self.txt_pins = QLineEdit(self)
         self.txt_pins.setPlaceholderText("all pins")
-        self.txt_pins.setMaximumWidth(90)
+        self.txt_pins.setMaximumWidth(70)
         lay.addWidget(self.cmb_net, 3)
         lay.addWidget(self.cmb_part, 3)
         lay.addWidget(self.txt_pins, 2)
@@ -516,7 +519,7 @@ class VrmEditor(_Editor):
         self.vin_row = RangeRow(self._input_nominal)
         # DC accuracy, in % of the target voltage or in volts.
         self.acc_row = RangeRow(lambda: self.voltage.value() or None)
-        self.btn_accuracy_calc = QPushButton("DC Accuracy Calculator…")
+        self.btn_accuracy_calc = QPushButton("DC accuracy…")
         self.btn_accuracy_calc.setToolTip(
             "Calculate an adjustable regulator's output range from its feedback reference, "
             "resistor divider and FB pin leakage")
@@ -527,7 +530,7 @@ class VrmEditor(_Editor):
         self.input_ground = self._picker(optional=True)
         self.ground_sense = self._picker(optional=True)
         # Mesh remote sense (#93): the sense pickers show the selected point.
-        self.mesh = QCheckBox("Enable mesh remote sense")
+        self.mesh = QCheckBox("Mesh remote sense")
         self.n_points = QSpinBox()
         self.n_points.setRange(1, 64)
         self.cmb_point = QComboBox()
@@ -1205,7 +1208,9 @@ class LinkEditor(_Editor):
         self.btn_spice = QPushButton("Import SPICE model…", self)
         self.btn_spice.clicked.connect(self._from_spice)
         f.addRow("SPICE model", self.btn_spice)
-        self.chk_spice = QCheckBox("Use the SPICE model's impedance")
+        self.chk_spice = QCheckBox("Use SPICE impedance")
+        self.chk_spice.setToolTip("Use the SPICE model's impedance for this part instead of "
+                                  "the values entered here")
         self.chk_spice.toggled.connect(self._spice_toggled)
         f.addRow(self.chk_spice)
         self.lbl_spice = QLabel()                   # which model, and whether it is used
@@ -1470,7 +1475,7 @@ class ItemList(QWidget):
         #: The Add / Duplicate / Remove row, for panels that add buttons of their own.
         self.buttons = row = QHBoxLayout()
         for text, slot, what in (("Add", self._add, f"Add a new {noun}"),
-                                 ("Duplicate", self._dup, f"Add a copy of the selected {noun}"),
+                                 ("Copy", self._dup, f"Add a copy of the selected {noun}"),
                                  ("Remove", self._remove, f"Delete the selected {noun}")):
             b = QPushButton(text, self)
             b.setToolTip(what)
@@ -1694,7 +1699,7 @@ class PIPanel(QWidget, PartSelection):
         self.load_list.buttons.addWidget(b_split)
         self.tabs.addTab(self.vrm_list, "VRMs")
         self.tabs.addTab(self.load_list, "Loads")
-        self.tabs.addTab(self.link_list, "Series links")
+        self.tabs.addTab(self.link_list, "Links")
         self.tabs.addTab(self._solve_tab(), "Solve")
         self.tabs.addTab(self._settings_tab(), "Mesh")
         self.tabs.addTab(self._thermal_tab(), "Thermal")
@@ -1755,7 +1760,8 @@ class PIPanel(QWidget, PartSelection):
         self.chk_arrows.setToolTip("Show current-flow arrows over the copper")
         self.chk_arrows.toggled.connect(self.arrows_toggled.emit)
         self._update_arrow_box()
-        b_export = QPushButton("Export ▾", g_res)
+        b_export = QPushButton("Export", g_res)
+        b_export.setFixedWidth(72)
         menu = QMenu(b_export)
         menu.addAction("Tables as CSV…", lambda: self.export_requested.emit("csv"))
         menu.addAction("3D results for ParaView (.vtm)…", lambda: self.export_requested.emit("vtk"))
@@ -1765,13 +1771,17 @@ class PIPanel(QWidget, PartSelection):
                             "results to reopen later")
         self.btn_export = b_export
         b_export.setEnabled(False)
-        b_geom = QPushButton("Show copper", g_res)
+        b_geom = QPushButton("Copper", g_res)
         b_geom.setToolTip("Back to the plain copper view. Pick a net group or field to see the "
                           "results again.")
         b_geom.clicked.connect(self.show_geometry.emit)
-        row.addWidget(self.cmb_group, 2)
-        row.addWidget(self.cmb_field, 2)
+        b_geom.setFixedWidth(80)
+        row.addWidget(self.cmb_group, 1)
+        row.addWidget(self.cmb_field, 1)
+        lr.addLayout(row)
+        row = QHBoxLayout()
         row.addWidget(self.chk_arrows)
+        row.addStretch(1)
         row.addWidget(b_geom)
         row.addWidget(b_export)
         lr.addLayout(row)
@@ -1804,7 +1814,7 @@ class PIPanel(QWidget, PartSelection):
         self.txt_notes = QTextBrowser(g_res)
         self.res_tabs.addTab(self.tbl_loads, "Loads")
         self.res_tabs.addTab(self.tbl_vrms, "VRMs")
-        self.res_tabs.addTab(self.tbl_links, "Series links")
+        self.res_tabs.addTab(self.tbl_links, "Links")
         self.res_tabs.addTab(self._vias_tab(), "Vias")
         self.tbl_losses = self._table(["Group"], sortable=True)
         self.tbl_losses.setToolTip("Power lost in the copper of each net group, by layer, in "
@@ -1856,7 +1866,8 @@ class PIPanel(QWidget, PartSelection):
         self._scale_limits: Dict[tuple, tuple] = {}
         self._scale_key = None
         row = QHBoxLayout()
-        self.lbl_scale = QLabel("Color scale", parent)
+        self.lbl_scale = QLabel("Scale", parent)
+        self.lbl_scale.setToolTip("The 3D color scale: lowest and highest value")
         self.spin_scale_min = _spin(-1e15, 1e15, 0.0, 3, "")
         self.spin_scale_max = _spin(-1e15, 1e15, 1.0, 3, "")
         self.spin_scale_min.setToolTip("Lowest value of the 3D color scale: copper at or below "
@@ -1864,8 +1875,10 @@ class PIPanel(QWidget, PartSelection):
         self.spin_scale_max.setToolTip("Highest value of the 3D color scale: copper at or above "
                                        "it takes the top color")
         for sp in (self.spin_scale_min, self.spin_scale_max):
+            sp.setMinimumWidth(48)
             sp.valueChanged.connect(self._scale_edited)
         self.btn_scale_auto = QPushButton("Auto", parent)
+        self.btn_scale_auto.setFixedWidth(48)
         self.btn_scale_auto.setToolTip("Fit the color scale to the whole result again")
         self.btn_scale_auto.clicked.connect(self._scale_auto)
         row.addWidget(self.lbl_scale)
@@ -2017,7 +2030,6 @@ class PIPanel(QWidget, PartSelection):
         self.spin_via_limit.valueChanged.connect(self._via_limit_changed)
         row.addWidget(self.spin_via_limit)
         row.addStretch(1)
-        row.addWidget(QLabel("double-click a row to show it"))
         v.addLayout(row)
         self.tbl_vias = self._table(["Group", "Via / pad", "x (mm)", "y (mm)", "Drill (mm)",
                                      "I (mA)", "P (mW)", ""], sortable=True)
@@ -2132,7 +2144,7 @@ class PIPanel(QWidget, PartSelection):
     def _large_pad_rows(self, f: QFormLayout, s):
         """Large terminal pads solved as copper, connected at a contact inside them (#207)."""
         f.addRow(QLabel("<b>Large pads</b>"))
-        self.chk_large_pads = QCheckBox("Model large pads as copper shapes")
+        self.chk_large_pads = QCheckBox("Model large pads")
         self.chk_large_pads.setChecked(s.large_pads_as_copper)
         self.chk_large_pads.setToolTip(art_tip(
             "Off: every load, VRM and series-part pad is one equipotential, as if the part "
@@ -2177,7 +2189,7 @@ class PIPanel(QWidget, PartSelection):
         w = QWidget()
         f = QFormLayout(w)
         t = self.setup.thermal
-        self.chk_thermal = QCheckBox("Electro-thermal co-simulation")
+        self.chk_thermal = QCheckBox("Electro-thermal")
         self.chk_thermal.setToolTip("Iterate the DC solve with a board temperature map: copper "
                                     "loss heats the board, hotter copper is more resistive")
         self.spin_ambient = _spin(-55, 200, t.ambient_c, 1, " °C", 1)
@@ -2193,7 +2205,7 @@ class PIPanel(QWidget, PartSelection):
         f.addRow("Iterations", self.spin_iters)
         f.addRow("Airflow", self.spin_airflow)
         f.addRow("Grid", self.spin_tgrid)
-        self.chk_load_power = QCheckBox("Include load power dissipation")
+        self.chk_load_power = QCheckBox("Include load heat")
         self.chk_load_power.setChecked(t.load_power)
         self.chk_load_power.setToolTip(
             "Heat the board with the power each load draws too: the sum over its supply and "
