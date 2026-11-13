@@ -13,6 +13,7 @@ from qtpy.QtWidgets import (QApplication, QCheckBox, QComboBox, QHBoxLayout, QLa
                             QScrollArea, QVBoxLayout, QWidget)
 
 from kipi.ac.gui.plot import COLORS, _eng, _eng_hz
+from kipi.gui.i18n import tr
 from kipi.gui.tooltip_art import art_tip
 from kipi.noise.waveforms import bandwidth_limited
 
@@ -214,12 +215,14 @@ class NoisePlot(QWidget):
             ranked = sorted(caps.items(), key=lambda kv: -kv[1].ac_rms())[:MAX_CAP_CURVES]
             return [(ref, kv) for ref, kv in ranked]     # rms is labelled on the plot
         if key == "probes":
-            return [(f"{n} (AC probe)", sp)
+            return [(f"{n} ({tr('AC probe')})", sp)
                     for n, sp in getattr(wf, "probe_ripple", {}).items()]
         if key == "states":
             v = self._victim()
-            return [] if v is None else [(f"{v.receiver} held {st.name}", st.receiver_v)
-                                         for st in v.states if st.receiver_v is not None]
+            return [] if v is None else [
+                (f"{v.receiver} {tr('held high' if st.name == 'high' else 'held low')}",
+                 st.receiver_v)
+                for st in v.states if st.receiver_v is not None]
         if key == "victim":
             v = self._victim()
             if v is None:
@@ -227,11 +230,12 @@ class NoisePlot(QWidget):
             out = []
             for k, *_ in VICTIM_CURVES:
                 if k == "total" and "total" in v.receiver_v:
-                    out.append((k, f"{v.receiver} (receiver)", v.receiver_v["total"]))
+                    out.append((k, f"{v.receiver} ({tr('receiver')})",
+                                v.receiver_v["total"]))
                 elif k == "driver" and "total" in v.driver_v:
-                    out.append((k, f"{v.driver} (driver)", v.driver_v["total"]))
+                    out.append((k, f"{v.driver} ({tr('driver')})", v.driver_v["total"]))
                 elif k in v.receiver_v and k != "total":
-                    out.append((k, f"{v.receiver} {k}", v.receiver_v[k]))
+                    out.append((k, f"{v.receiver} {tr(k)}", v.receiver_v[k]))
             return out
         out = []
         if wf.input_ripple is not None:
@@ -301,8 +305,8 @@ class NoisePlot(QWidget):
                 self._curves.append((label, f, amp, unit, ax))
             if peak > 0:
                 ax.set_ylim(floor, peak * 3)
-            ax.set_xlabel("Frequency")
-            ax.set_ylabel(f"Amplitude ({unit} peak)")
+            ax.set_xlabel(tr("Frequency"))
+            ax.set_ylabel(tr(f"Amplitude ({unit} peak)"))
             ax.xaxis.set_major_formatter(FuncFormatter(_eng_hz))
             ax.grid(True, which="major", color="#555", lw=0.6)
         else:
@@ -318,33 +322,37 @@ class NoisePlot(QWidget):
             # In volts (#179). The margin lines are drawn where they fit; far above small
             # noise they would flatten it, so the axis then follows the noise.
             if v is not None and v.margin_v <= 4 * max(v.peak_v, 1e-15):
-                _level(ax, v.margin_v, f"noise margin ±{_eng(v.margin_v, 'V')}", "#ff6060", "--")
+                _level(ax, v.margin_v, tr(f"noise margin ±{_eng(v.margin_v, 'V')}"),
+                       "#ff6060", "--")
                 _level(ax, -v.margin_v, None, "#ff6060", "--")
             elif v is not None:
                 ax.set_ylim(-1.3 * v.peak_v, 1.3 * v.peak_v)
-            ax.set_xlabel("Time (µs)")
+            ax.set_xlabel(tr("Time (µs)"))
             ax.set_ylabel(unit)
             ax.grid(True, color="#444", lw=0.5)
         op = self.result.operating
         v = self._victim() if self.cmb_view.currentData() in ("victim", "states") else None
         if v is not None:
-            ax.set_title(f"{v.name}: {v.peak_v * 1e3:.4g} mV peak against its "
-                         f"±{v.margin_v * 1e3:.4g} mV margin, from {self.result.aggressor}",
+            ax.set_title(tr(f"{v.name}: {v.peak_v * 1e3:.4g} mV peak against its "
+                            f"±{v.margin_v * 1e3:.4g} mV margin, from {self.result.aggressor}"),
                          fontsize=10)
         else:
-            ax.set_title(f"{self.result.aggressor} ({op.topology}, {op.vin:g} V → {op.vout:g} V, "
-                         f"{op.iout:.3g} A, {wf.fsw_hz / 1e3:g} kHz, D = {op.duty:.3f})",
+            ax.set_title(tr(f"{self.result.aggressor} ({op.topology}, {op.vin:g} V → {op.vout:g} V, "
+                            f"{op.iout:.3g} A, {wf.fsw_hz / 1e3:g} kHz, D = {op.duty:.3f})"),
                          fontsize=10)
-        hint = "Hover to read the curves; scroll to zoom, Shift+scroll for Y, double-click to reset"
+        hint = tr("Hover to read the curves; scroll to zoom, Shift+scroll for Y, "
+                  "double-click to reset")
         if (v is not None and key == "victim" and not spectrum
                 and v.margin_v > 4 * max(v.peak_v, 1e-15)):
-            hint += f" (the ±{v.margin_v * 1e3:.4g} mV noise margin is off the scale)"
+            hint += (" (" + tr(f"the ±{v.margin_v * 1e3:.4g} mV noise margin is off "
+                               "the scale") + ")")
         self.lbl.setText(hint + self._bw_note())
         self._remember_home()
         self.canvas.draw_idle()
 
     def _bw_note(self) -> str:
-        return (". 20 MHz bandwidth limit: the title's figures are the full bandwidth's"
+        return (tr(". 20 MHz bandwidth limit: the title's figures are the full "
+                   "bandwidth's")
                 if self.chk_bw.isChecked() else "")
 
     def _limited(self, sp):
@@ -370,7 +378,7 @@ class NoisePlot(QWidget):
                 chk = QCheckBox(label, self.curve_box)
                 chk.setProperty("curve", name)
                 chk.setChecked(name not in hidden)
-                chk.setToolTip(tips[name] if key == "victim" else f"Show {label}")
+                chk.setToolTip(tips[name] if key == "victim" else tr(f"Show {label}"))
                 pix = QPixmap(12, 12)
                 pix.fill(QColor(COLORS[i % len(COLORS)]))
                 chk.setIcon(QIcon(pix))
@@ -390,7 +398,7 @@ class NoisePlot(QWidget):
             figures.append(f"<span style='color:{COLORS[i % len(COLORS)]}'>"
                            f"{_figure(float(np.ptp(y)), s.unit)}&nbsp;p-p, "
                            f"{_figure(rms, s.unit)}&nbsp;rms</span>")
-        bw = "20 MHz limit" if self.chk_bw.isChecked() else "Full bandwidth"
+        bw = tr("20 MHz limit") if self.chk_bw.isChecked() else tr("Full bandwidth")
         self.lbl_figures.setText(f"<span style='color:#999'>{bw}:</span> "
                                  + " &nbsp; ".join(figures) if figures else "")
         return shown
@@ -466,6 +474,7 @@ class NoisePlot(QWidget):
                     label=label)
             self._curves.append((label, t, st.level_v + noise, "V", ax))
             out_name, in_name = names.get(st.name, ("level", "threshold"))
+            out_name, in_name = tr(out_name), tr(in_name)
             _level(ax, st.level_v, f"{out_name} {st.level_v:.3g} V", "#999", ":", lw=0.8)
             peak = max(float(np.max(np.abs(noise))), 1e-15)
             # As in the noise view: the threshold is drawn where it fits beside the noise.
@@ -479,14 +488,15 @@ class NoisePlot(QWidget):
             ax.set_ylabel("V")
             ax.set_xlim(0, t[-1] * 1e6)
             ax.grid(True, color="#444", lw=0.5)
-            ax.set_title(f"{v.name} held {st.name} (driver {st.driver_ohm:.4g} Ω): "
-                         f"{st.excursion_v * 1e3:.4g} mV toward {in_name}, "
-                         f"{st.margin_v * 1e3:.4g} mV away",
+            ax.set_title(tr(f"{v.name} held {st.name} (driver {st.driver_ohm:.4g} Ω): "
+                            f"{st.excursion_v * 1e3:.4g} mV toward {in_name}, "
+                            f"{st.margin_v * 1e3:.4g} mV away"),
                          fontsize=9)
-        self.axes[-1].set_xlabel("Time (µs)")
-        hint = "Hover to read the curves; scroll to zoom, Shift+scroll for Y, double-click to reset"
+        self.axes[-1].set_xlabel(tr("Time (µs)"))
+        hint = tr("Hover to read the curves; scroll to zoom, Shift+scroll for Y, "
+                  "double-click to reset")
         if off:
-            hint += f" ({' and '.join(off)} off the scale)"
+            hint += " (" + " and ".join(off) + " " + tr("off the scale") + ")"
         self.lbl.setText(hint + self._bw_note())
         self._remember_home()
         self.canvas.draw_idle()

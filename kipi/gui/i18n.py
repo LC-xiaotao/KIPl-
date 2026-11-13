@@ -268,6 +268,57 @@ def tr(text: Any) -> Any:
     if m:
         return f"{m.group(1)} 个负载。纹波和瞬态为全带宽。"
 
+    # Titles and labels the waveform plots build at run time (matplotlib axes have no Qt
+    # setter to patch, so the call sites pass their strings through tr() themselves).
+    m = re.match(r"^Amplitude \((.+?) peak\)$", text)
+    if m:
+        return f"幅值（{m.group(1)} 峰值）"
+    m = re.match(r"^Time \((.+)\)$", text)
+    if m:
+        return f"时间 ({m.group(1)})"
+    m = re.match(r"^Show (.+)$", text)
+    if m:
+        return f"显示 {m.group(1)}"
+    m = re.match(r"^noise margin ±(.+)$", text)
+    if m:
+        return f"噪声容限 ±{m.group(1)}"
+    m = re.match(r"^the ±(.+) mV noise margin is off the scale$", text)
+    if m:
+        return f"±{m.group(1)} mV 噪声容限超出显示范围"
+    m = re.match(r"^(.+): (.+) mV peak against its ±(.+) mV margin, from (.+)$", text)
+    if m:
+        return (f"{m.group(1)}：峰值 {m.group(2)} mV，相对 ±{m.group(3)} mV 裕量，"
+                f"来自 {m.group(4)}")
+    m = re.match(r"^(.+?) \((buck|boost), (.+) V → (.+) V, (.+) A, (.+) kHz, D = (.+)\)$",
+                 text)
+    if m:
+        top = "降压" if m.group(2) == "buck" else "升压"
+        return (f"{m.group(1)}（{top}，{m.group(3)} V → {m.group(4)} V，{m.group(5)} A，"
+                f"{m.group(6)} kHz，D = {m.group(7)}）")
+    m = re.match(r"^(.+) held (high|low) \(driver (.+) Ω\): (.+) mV toward (.+), "
+                 r"(.+) mV away$", text)
+    if m:
+        st = "高电平" if m.group(2) == "high" else "低电平"
+        return (f"{m.group(1)} 保持{st}（驱动 {m.group(3)} Ω）：{m.group(4)} mV 朝向 "
+                f"{m.group(5)}，距其 {m.group(6)} mV")
+    m = re.match(r"^its (.+) edge is slow enough that the PDN is still capacitive at its "
+                 r"(.+): no ESL spike stands out from the droop \(−(.+) mV over the edge\)$",
+                 text)
+    if m:
+        return (f"其 {m.group(1)} 边沿足够慢，PDN 在 {m.group(2)} 时仍呈容性："
+                f"没有超出下垂的 ESL 尖峰（边沿内 −{m.group(3)} mV）")
+    m = re.match(r"^ESL spike L·di/dt = (.+) × (.+) A/µs = (.+) mV over its (.+) edge; "
+                 r"−(.+) mV there with the droop$", text)
+    if m:
+        return (f"ESL 尖峰 L·di/dt = {m.group(1)} × {m.group(2)} A/µs = {m.group(3)} mV"
+                f"（{m.group(4)} 边沿内）；连同下垂为 −{m.group(5)} mV")
+    m = re.match(r"^VRM bandwidth (.+)$", text)
+    if m:
+        return f"VRM 带宽 {m.group(1)}"
+    m = re.match(r"^(.+): (.+) against (.+)$", text)
+    if m:
+        return f"{m.group(1)}：{m.group(2)} 对 {m.group(3)}"
+
     # Keep leading/trailing spaces: "Mode: " and table cells use them.
     stripped = text.strip()
     if stripped != text:

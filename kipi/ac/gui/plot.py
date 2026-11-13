@@ -11,6 +11,8 @@ import numpy as np
 from qtpy.QtCore import Qt, Signal
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from kipi.gui.i18n import tr
+
 COLORS = ("#4fa3ff", "#ffa040", "#60d060", "#ff6080", "#c080ff", "#40d0d0", "#e0e060")
 CURSOR_COLOR = "#e8e8e8"
 EMPTY = "Solve a rail in AC mode to see its impedance here."
@@ -117,19 +119,20 @@ class ImpedancePlot(QWidget):
             t = c.target_at(f)
             if t is not None:                 # NaN where no target applies: not drawn
                 ax.loglog(f, t, color=color, lw=1.2, ls="--", alpha=0.8,
-                          label=f"{c.name} target")
+                          label=f"{c.name} {tr('target')}")
         bw = getattr(result, "bandwidth_hz", None)
         if bw and f[0] < bw < f[-1]:
             ax.axvline(bw, color="#888", lw=1.0, ls=":",
-                       label=f"VRM bandwidth {_eng_hz(bw)}")
+                       label=tr(f"VRM bandwidth {_eng_hz(bw)}"))
         ax.set_xlim(f[0], f[-1])
-        ax.set_xlabel("Frequency")
+        ax.set_xlabel(tr("Frequency"))
         ax.set_ylabel("|Z|")
         ax.xaxis.set_major_formatter(FuncFormatter(_eng_hz))
         ax.yaxis.set_major_formatter(FuncFormatter(_eng_ohms))
         ax.grid(True, which="major", color="#555", lw=0.6)
         ax.grid(True, which="minor", color="#333", lw=0.4)
-        ax.set_title(f"{result.rail}: {' + '.join(result.rail_nets)} against {result.ground}",
+        ax.set_title(tr(f"{result.rail}: {' + '.join(result.rail_nets)} against "
+                        f"{result.ground}"),
                      fontsize=10)
         leg = ax.legend(loc="best", fontsize=8, facecolor="#2a2a2a", edgecolor="#555")
         for t in leg.get_texts():

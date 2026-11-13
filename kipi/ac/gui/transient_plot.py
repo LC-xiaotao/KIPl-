@@ -13,6 +13,7 @@ from qtpy.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from kipi.ac.gui.plot import COLORS, _eng
 from kipi.ac.transient import bandwidth_limited, transients
+from kipi.gui import i18n
 from kipi.gui.tooltip_art import art_tip
 
 EMPTY = ("Give a probe a load step and slew rate (Probes tab) and its VRM a control loop "
@@ -40,15 +41,17 @@ def edge_text(tr) -> str:
     rise = _eng(tr.t_rise_s, "s", 3)
     if tr.spike_v is None:
         f_edge = 1.0 / (math.pi * tr.t_rise_s)
-        return (f"its {rise} edge is slow enough that the PDN is still capacitive at its "
-                f"{_eng(f_edge, 'Hz', 3)}: no ESL spike stands out from the droop "
-                f"(−{tr.edge_v * 1e3:.3g} mV over the edge)")
+        return i18n.tr(
+            f"its {rise} edge is slow enough that the PDN is still capacitive at its "
+            f"{_eng(f_edge, 'Hz', 3)}: no ESL spike stands out from the droop "
+            f"(−{tr.edge_v * 1e3:.3g} mV over the edge)")
     slew = tr.step_a / tr.t_rise_s / 1e6
     # Rounded first, so 0.99997 nH reads 1 nH, not 1e+03 pH.
     l_h = float(f"{tr.edge_l_h:.3g}")
-    return (f"ESL spike L·di/dt = {_eng(l_h, 'H', 3)} × {slew:.3g} A/µs = "
-            f"{tr.spike_v * 1e3:.3g} mV over its {rise} edge; −{tr.edge_v * 1e3:.3g} mV "
-            "there with the droop")
+    return i18n.tr(
+        f"ESL spike L·di/dt = {_eng(l_h, 'H', 3)} × {slew:.3g} A/µs = "
+        f"{tr.spike_v * 1e3:.3g} mV over its {rise} edge; −{tr.edge_v * 1e3:.3g} mV "
+        "there with the droop")
 
 
 class TransientPlot(QWidget):
@@ -174,9 +177,9 @@ class TransientPlot(QWidget):
                     self.ax_v.plot(tr.t * k, (settled + y) * 1e3, color=color, lw=1.0,
                                    ls="--", alpha=0.8)
         self.ax_v.axhline(0, color="#666", lw=0.8)
-        self.ax_i.set_ylabel("Load step (A)")
-        self.ax_v.set_ylabel("Rail deviation (mV)")
-        self.ax_v.set_xlabel(f"Time ({unit})")
+        self.ax_i.set_ylabel(i18n.tr("Load step (A)"))
+        self.ax_v.set_ylabel(i18n.tr("Rail deviation (mV)"))
+        self.ax_v.set_xlabel(i18n.tr(f"Time ({unit})"))
         self.ax_v.set_xlim(span[0] * k, span[1] * k)
         if self.chk_edge.isChecked():
             # Fit each axis to what the zoom shows.
@@ -189,8 +192,9 @@ class TransientPlot(QWidget):
                 ax.set_ylim(lo - pad, hi + pad)
         for ax in (self.ax_i, self.ax_v):
             ax.grid(True, color="#444", lw=0.6)
-        bw = ", 20 MHz bandwidth limit" if self.chk_bw.isChecked() else ""
-        self.ax_i.set_title(f"{result.rail}: estimated transient response{bw}", fontsize=10)
+        bw = i18n.tr(", 20 MHz bandwidth limit") if self.chk_bw.isChecked() else ""
+        self.ax_i.set_title(f"{result.rail}: {i18n.tr('estimated transient response')}{bw}",
+                            fontsize=10)
         leg = self.ax_v.legend(loc="best", fontsize=8, facecolor="#2a2a2a", edgecolor="#555")
         for t in leg.get_texts():
             t.set_color("#ddd")
