@@ -74,7 +74,7 @@ class BoardCuts:
     """The board's copper by layer and role, for cutting cross-sections."""
 
     def __init__(self, snap: BoardSnapshot, victim: str, switch_nets: Sequence[str],
-                 window_mm: float, default_er: float = DEFAULT_ER):
+                 window_mm: float, default_er: float = DEFAULT_ER, reference_net: Optional[str] = None):
         import shapely
         from kipi.core.geometry.copper import net_layer_copper, poly_to_shapely
         from kipi.core.model.nets import classify_nets
@@ -82,9 +82,11 @@ class BoardCuts:
         self.window = window_mm
         self.stack = snap.stackup
         self.switch_nets = [n for n in dict.fromkeys(switch_nets) if n]
-        kinds = classify_nets(snap)
-        ref_nets = [n for n, k in kinds.items() if k in ("ground", "power")
-                    and n != victim and n not in self.switch_nets]
+        if reference_net is None:
+            ref_nets = [n for n, k in classify_nets(snap).items() if k in ("ground", "power")
+                        and n != victim and n not in self.switch_nets]
+        else:
+            ref_nets = [reference_net]
         self.agg: Dict[Tuple[str, int], object] = {}
         self.ref: Dict[int, object] = {}
         for lay in self.stack.copper:
@@ -95,7 +97,7 @@ class BoardCuts:
                     self.agg[(n, lay.id)] = g
             parts = [net_layer_copper(snap, n, lay.id, cut_drills=False) for n in ref_nets]
             parts += [poly_to_shapely(p) for z in snap.zones
-                      if z.net not in ref_nets and z.net != victim
+                      if reference_net is None and z.net not in ref_nets and z.net != victim
                       and z.net not in self.switch_nets for p in z.filled.get(lay.id, [])]
             parts = [p for p in parts if p is not None and not p.is_empty]
             if parts:

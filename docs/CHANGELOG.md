@@ -4,6 +4,28 @@ All notable changes to KiPI, newest first. Each minor version is one development
 The code's version number went from 0.1.0 straight to 0.5.0, so 0.2.0 to 0.4.0 name
 milestones rather than versions that were ever set.
 
+## Unreleased
+
+- Added single-ended signal integrity analysis from routed PCB copper, including a
+  source termination sweep, receiver waveforms, linked TDR/board view and PRBS7 eye.
+
+### 单端信号完整性仿真（第一版）
+
+基于 KiPI 1.0.2。打开 PCB，点击桌面端工具栏的 **SI…**，选择信号网络、参考网络和收发焊盘，即可运行仿真。
+
+- **比较端接。** 一次输入多个源端串阻，对比接收端过冲、振铃和门限穿越次数。可叠加串阻后的发送端波形。
+- **定位反射。** 点击 TDR 曲线，板图会按首次往返传播时间标出选定路径上的候选位置，并显示层名、坐标和距离。
+- **查看眼图。** 设置数据率后，查看最后一组串阻的 PRBS7 接收眼图和 0.5 UI 处的眼高。
+
+可直接打开[阶跃阻抗示例板](../examples/validation/single_ended_si/stepped_line.kipi.json)。
+在 1.8 V 驱动、200 ps 边沿、18 Ω 驱动内阻和 3 pF 接收负载下，附加串阻为 0、22、33 Ω 时，
+接收峰值分别为 2.940、2.225、1.983 V。TDR 可以定位到 X = 60 mm 的线宽变化处。
+
+![KiPI 桌面端的端接对比、TDR 定位和接收眼图](images/si-v1-desktop.png)
+
+本版支持点对点和树形分支，采用无损准 TEM 走线模型，焊盘和过孔按理想连接处理。
+验证覆盖匹配线、阶跃阻抗、电容负载、开路支路、跨层连接和桌面交互。以上数值为示例板仿真结果。
+
 ## 1.0.2
 
 ### Added

@@ -302,6 +302,8 @@ class MainWindow(QMainWindow):
             "Save the 3D view, or the impedance plot if it is showing, as a PNG",
             KEYS["screenshot"])
         tb.addSeparator()
+        self.act_si = act("SI…", self.show_si, "Single-ended receiver waveforms, termination sweep and TDR")
+        self.act_si.setEnabled(False)
         self.act_open_results = act("Open results…", self.open_results, keys=KEYS["results"])
         self._set_open_results_tip()
         self.act_stackup = act("Stackup", self.show_stackup,
@@ -347,6 +349,7 @@ class MainWindow(QMainWindow):
         cancelled; Import and Save also wait for a board."""
         for rb in self.mode_buttons.buttons():
             rb.setEnabled(on)
+        self.act_si.setEnabled(on and self.snapshot is not None)
         self.setup_bar.setEnabled(on and self.snapshot is not None)
         self._show_history()
 
@@ -459,6 +462,13 @@ class MainWindow(QMainWindow):
         self.stackup_window.show()
         self.stackup_window.raise_()
         self.stackup_window.activateWindow()
+
+    def show_si(self):
+        if self.snapshot is not None and not self._busy():
+            from kipi.si.dialog import SignalDialog
+            dialog = SignalDialog(self.snapshot, self.solve_panel.setup.ac.default_er, self)
+            dialog.exec()
+            dialog.deleteLater()
 
     def show_power_tree(self):
         from kipi.gui.power_tree import PowerTreeWindow
@@ -1121,6 +1131,7 @@ class MainWindow(QMainWindow):
                 (prev.board_name, prev.project_dir) == (snap.board_name, snap.project_dir)
                 else None)
         self.snapshot = snap
+        self.act_si.setEnabled(not self._busy())
         self._copper_cache.clear()
         self._model_cache.clear()
         self._model_gen += 1

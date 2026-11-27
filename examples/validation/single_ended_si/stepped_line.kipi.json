@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "board_name": "Stepped microstrip",
+  "source": "KiPI validation",
+  "stackup": {
+    "board_thickness_mm": 0.27,
+    "copper": [
+      {"id": 3, "name": "F.Cu", "index": 0, "thickness_mm": 0.035, "z_bottom_mm": 0.235},
+      {"id": 34, "name": "B.Cu", "index": 1, "thickness_mm": 0.035, "z_bottom_mm": 0}
+    ],
+    "dielectrics": [{"thickness_mm": 0.2, "material": "FR4", "epsilon_r": 4.1, "above_layer": 3, "below_layer": 34}]
+  },
+  "nets": [{"code": 1, "name": "CLK"}, {"code": 2, "name": "GND"}],
+  "tracks": [
+    {"net": "CLK", "layer": 3, "width_mm": 0.36, "start": [0, 0], "end": [60, 0]},
+    {"net": "CLK", "layer": 3, "width_mm": 0.16, "start": [60, 0], "end": [90, 0]}
+  ],
+  "vias": [],
+  "pads": [
+    {"id": "TX.1", "net": "CLK", "footprint": "J1", "number": "1", "position": [0, 0], "pad_type": "smd",
+     "drill_mm": [0, 0], "shapes": {"3": [{"holes": [], "outline": [[-0.25,-0.25],[0.25,-0.25],[0.25,0.25],[-0.25,0.25]]}]}},
+    {"id": "RX.1", "net": "CLK", "footprint": "J2", "number": "1", "position": [90, 0], "pad_type": "smd",
+     "drill_mm": [0, 0], "shapes": {"3": [{"holes": [], "outline": [[89.75,-0.25],[90.25,-0.25],[90.25,0.25],[89.75,0.25]]}]}}
+  ],
+  "footprints": [
+    {"id": "J1", "reference": "J1", "value": "TX", "position": [0, 0], "side": "top", "pad_ids": ["TX.1"]},
+    {"id": "J2", "reference": "J2", "value": "RX", "position": [90, 0], "side": "top", "pad_ids": ["RX.1"]}
+  ],
+  "zones": [{"id": "plane", "net": "GND", "name": "", "priority": 0,
+             "filled": {"34": [{"holes": [], "outline": [[-4,-4],[94,-4],[94,4],[-4,4]]}]}}],
+  "outline": [{"holes": [], "outline": [[-4,-4],[94,-4],[94,4],[-4,4]]}]
+}

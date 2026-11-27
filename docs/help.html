@@ -2935,6 +2935,26 @@ version info</b>, and if you can, a board snapshot and setup file that show the 
 
 <p style="margin-top:40px;color:var(--muted);font-size:0.85em">KiPI is free software under the GNU
 GPL v3 or later. Source and issues: <a href="https://github.com/drewsum/KiPI">github.com/drewsum/KiPI</a>.</p>
+<h2 id="signal-integrity">Single-ended signal integrity (SI)</h2>
+<p>Open a board, review its stackup and select <b>SI…</b> on the toolbar. Pick a signal
+net, its reference copper net, and separate transmitter and receiver pads using the lists
+or the board map. Source impedance and each additional series resistor are in ohms.
+Set the high voltage, 10–90% rise time, receiver resistance and capacitance, and a voltage
+threshold. Run the solve to compare receiver peaks and threshold crossing counts.
+Enable the TX overlay to compare the line-side source voltage against each receiver.
+Try the included <code>examples/validation/single_ended_si/stepped_line.kipi.json</code>
+snapshot, a 90 mm clock trace with a width change at X = 60 mm.</p>
+<p>The model splits traces into sections up to 2 mm long and extracts quasi-TEM impedance
+and propagation time from the copper and dielectrics at each section's midpoint.
+Lossless lines retain tree branches and their reflections. Other terminals are open.
+Pads and vias are ideal connections: their barrel delay, stub resonance, package
+parasitics and clamp currents are omitted. Signal-net pours, closed loops and missing reference copper
+are reported. Inspect the source board's stackup and via layer spans when importing.</p>
+<p>TDR uses the selected reference resistance at the source and receiver and the same
+edge speed. Click the TDR curve to mark a candidate first-arrival point on the TX–RX
+path. Branch reflections and later echoes can share a time. The optional PRBS7 eye uses
+the last series resistor, a symmetric falling edge and the chosen data rate; it shows
+deterministic channel distortion. Use the figure toolbar to zoom or save the result.</p>
 </main>
 </div>
 
