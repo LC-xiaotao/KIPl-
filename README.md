@@ -40,6 +40,8 @@ analysis modes:
   checked against its logic family's noise margin, with the line held high and held low, and
   the 3D view shows where along its traces the noise couples in.
 
+本分支的单端 SI 功能、示例板与后续开发安排见[更新说明](docs/CHANGELOG.md)和[中文开发路线图](docs/ROADMAP.zh-CN.md)。
+
 **Learning KiPI? Follow the [Tutorial](https://drewsum.github.io/KiPI/tutorial.html)**: one
 real board set up and solved in DC, AC and Coupled Noise from scratch, every step
 screenshotted. It covers VRMs, loads, series links, capacitor models from a datasheet,
